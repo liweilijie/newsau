@@ -86,11 +86,15 @@ class AbcSpider(RedisSpider):
         if post_title == '':
             post_title = response.css('div[data-component="ArticleWeb"] h1::text').extract_first("").strip()
 
+        if post_title == '' or post_title is None:
+            self.log(f"no title found in {response.url}")
+            return
+
         post_topic = response.xpath('//*[@id="content"]/article//header//ul/li//p/text()').extract_first("").strip()
         if post_topic == '':
             post_topic = response.css('div[data-component="ArticleWeb"] li a[data-component="SubjectTag"] p::text').extract_first("").strip()
 
-        post_content_first_image_url = response.css('figure[data-component="Figure"] div img::attr(src)').extract_first("").strip()
+        # post_content_first_image_url = response.css('figure[data-component="Figure"] div img::attr(src)').extract_first("").strip()
 
         # //*[@id="content"]/article/div/div[1]/div[1]/div[3]
         post_header = response.xpath('//*[@id="content"]/article/div/div[1]/div[1]/div[3]').extract_first("").strip()
@@ -98,6 +102,12 @@ class AbcSpider(RedisSpider):
         post_content = response.xpath('//*[@id="body"]//div[contains(@class,ArticleRender)]/text()').extract_first("").strip()
         if post_content == '':
             post_content = response.xpath('//*[@id="content"]/article/div/div[2]/div/div[1]').extract_first("").strip()
+
+
+        if post_content == '' or post_content is None:
+            self.log(f"not content found in {response.url}")
+            return
+
 
         # data-component = "Timestamp"
         # datetime = "2025-02-10T04:55:05.000Z"

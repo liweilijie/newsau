@@ -25,6 +25,10 @@ class WpApi():
     post = WordPressPost()
     post.title = title
     post.content = content
+
+    # Save the post as a draft for review
+    # post.post_status = 'draft'
+
     post.post_status = status
 
     if post_date is None or post_date == "":
