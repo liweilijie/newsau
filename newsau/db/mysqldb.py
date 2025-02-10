@@ -23,3 +23,15 @@ class MySqlObj(object):
         # return self.cursor.fetchall()
         return self.cursor.fetchone()
 
+
+    # find the total count of post at today
+    def count_urls_today(self):
+        # SELECT COUNT(*) AS total_posts_today FROM your_table WHERE DATE(scrapy_date) = CURDATE();
+        sql = f"SELECT count(*) FROM wp_scrapy_news WHERE DATE(scrapy_date) = CURDATE()"
+        self.cursor.execute(sql)
+        return self.cursor.fetchone()[0]
+
+if __name__ == "__main__":
+    mysqlObj = MySqlObj()
+    count = mysqlObj.count_urls_today()
+    print(count)

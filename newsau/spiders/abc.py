@@ -10,6 +10,7 @@ from newsau.items import AbcDataItem
 from newsau.utils import common
 from newsau.db import mysqldb
 from scrapy_redis.spiders import RedisSpider
+from newsau.settings import NEWS_ACCOUNTS
 
 
 class AbcSpider(RedisSpider):
@@ -69,7 +70,15 @@ class AbcSpider(RedisSpider):
     # scrapy shell https://www.abc.net.au/news/2025-02-03/alice-springs-cairns-flight-central-australia-tourism-season/104888858
     # scrapy shell to manual code the css selector
     def parse_detail(self, response):
+
+        current_count = self.mysqlObj.count_urls_today()
+
+        if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
+            self.log(f"we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
+            return
+
         self.log(f"I just visited detail {response.url}")
+
         abc_item = AbcDataItem()
         abc_item["name"] = self.name
 
