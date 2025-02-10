@@ -71,7 +71,7 @@ class AbcSpider(RedisSpider):
     # scrapy shell to manual code the css selector
     def parse_detail(self, response):
 
-        current_count = self.mysqlObj.count_urls_today()
+        current_count = self.mysqlObj.count_urls_today(self.name)
 
         if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
             self.log(f"we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
@@ -118,6 +118,8 @@ class AbcSpider(RedisSpider):
         if self.mysqlObj.query_url_object_id(abc_item["url_object_id"]) is not None:
             print(f"url: {abc_item['url']} already exist in db nothing to do.")
             return
+
+        abc_item["category"] = self.mysqlObj.get_news_category(self.name, abc_item["topic"])
 
         abc_item["front_image_url"] = []
 

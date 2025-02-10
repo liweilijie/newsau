@@ -44,10 +44,10 @@ class AbcContentTranslatePipeline(object):
 
     def process_item(self, item, spider):
 
-        # for test
-        item["title"] = item["origin_title"]
-        item["content"] = item["origin_content"]
-        return item
+        # # for test
+        # item["title"] = item["origin_title"]
+        # item["content"] = item["origin_content"]
+        # return item
 
         if item["origin_title"] != "":
             tr_title = self.op.retry_translate_title(item["origin_title"])
@@ -125,7 +125,7 @@ class MySqlPipeline(object):
                 print("insert affected rows = {}".format(self.cursor.rowcount))
                 if self.cursor.rowcount > 0:
                     print(f"send to wp:{item.get_title()}")
-                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), tags=[item["name"]])
+                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
                     # update_post(item.get_title(), item.get_content())
 
             except Exception as e:
