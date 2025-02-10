@@ -36,20 +36,23 @@ class NewsauPipeline:
 
 class AbcContentTranslatePipeline(object):
 
+    def __init__(self):
+        # fist use deepseek to translate
+        self.dp = deepseek.DeepSeekApi()
+        self.op = openaiplat.OpenAiPlat()
+
+
     def process_item(self, item, spider):
 
-        # # for test
-        # item["title"] = item["origin_title"]
-        # item["content"] = item["origin_content"]
-        # return item
+        # for test
+        item["title"] = item["origin_title"]
+        item["content"] = item["origin_content"]
+        return item
 
-        # fist use deepseek to translate
-        dp = deepseek.DeepSeekApi()
-        op = openaiplat.OpenAiPlat()
         if item["origin_title"] != "":
-            tr_title = op.retry_translate_title(item["origin_title"])
+            tr_title = self.op.retry_translate_title(item["origin_title"])
             if tr_title is None:
-                tr_title = dp.retry_translate_title(item["origin_title"])
+                tr_title = self.dp.retry_translate_title(item["origin_title"])
 
             if tr_title is not None:
                 # tr_title remove newline
@@ -60,9 +63,10 @@ class AbcContentTranslatePipeline(object):
                 item["title"] = tr_title
 
         if item["origin_content"] != "":
-            tr_content = op.retry_translate_content(item["origin_content"])
+            tr_content = self.op.retry_translate_content(item["origin_content"])
+            print(tr_content)
             if tr_content is None:
-                tr_content = dp.retry_translate_content(item["origin_content"])
+                tr_content = self.dp.retry_translate_content(item["origin_content"])
 
             if tr_content is not None:
                 item["content"] = tr_content
@@ -120,7 +124,8 @@ class MySqlPipeline(object):
                 self.conn.commit()
                 print("insert affected rows = {}".format(self.cursor.rowcount))
                 if self.cursor.rowcount > 0:
-                    self.wp.post(item.get_title(), item.get_content(), tags=[item["name"]])
+                    print(f"send to wp:{item.get_title()}")
+                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), tags=[item["name"]])
                     # update_post(item.get_title(), item.get_content())
 
             except Exception as e:

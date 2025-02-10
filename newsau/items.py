@@ -4,6 +4,7 @@
 # https://docs.scrapy.org/en/latest/topics/items.html
 
 import scrapy
+from newsau.utils import common
 
 
 class NewsauItem(scrapy.Item):
@@ -22,6 +23,8 @@ class AbcDataItem(scrapy.Item):
     front_image_path = scrapy.Field()
     origin_content = scrapy.Field()
     content = scrapy.Field()
+    post_date = scrapy.Field()
+    scrapy_date = scrapy.Field
 
     def get_insert_sql(self):
 
@@ -34,7 +37,7 @@ class AbcDataItem(scrapy.Item):
         # insert into wp_scrapy_news(title, topic, url, url_object_id, front_image_url, front_image_path, content, create_date)
         #  values (%s, %s, %s, %s, %s, %s, %s, %s)
         #  ON DUPLICATE KEY UPDATE content=values(content)"""
-        insert_sql = """insert into wp_scrapy_news(name, origin_title, title, topic, url, url_object_id, front_image_url, front_image_path, origin_content, content, create_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        insert_sql = """insert into wp_scrapy_news(name, origin_title, title, topic, url, url_object_id, front_image_url, front_image_path, origin_content, content, post_date, scrapy_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
         params = list()
         params.append(self.get("name", ""))
@@ -47,9 +50,13 @@ class AbcDataItem(scrapy.Item):
         params.append(",".join(self.get("front_image_path", ["empty"])))
         params.append(self.get("origin_content", ""))
         params.append(self.get("content", ""))
-        params.append(self.get("create_date", "1970-07-10"))
+        params.append(self.get("post_date", common.convert_to_datetime(None)))
+        params.append(self.get("scrapy_date", common.convert_to_datetime(None)))
 
         return insert_sql, tuple(params)
+
+    def get_post_date(self):
+        return self.get("post_date", common.convert_to_datetime(None))
 
     def get_title(self):
         return self.get("title", "")

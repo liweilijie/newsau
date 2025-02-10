@@ -1,7 +1,9 @@
-import datetime
+from datetime import datetime
 
+import pytz
 from wordpress_xmlrpc import Client, WordPressPost
 from wordpress_xmlrpc.methods.posts import NewPost, GetPosts
+from newsau.utils import common
 
 
 class WpApi():
@@ -12,9 +14,10 @@ class WpApi():
     self.user = user
     self.password = password
     self.client = Client(self.url, self.user, self.password)
+    self.sydney_tz = pytz.timezone("Australia/Sydney")
 
 
-  def post(self, title, content, status='publish', categories=['澳洲新闻'], tags=[]):
+  def post(self, title, content, post_date=None, status='publish', categories=['澳洲新闻'], tags=[]):
     # post and activate new post
     if title == "" or content == "":
       return
@@ -23,7 +26,20 @@ class WpApi():
     post.title = title
     post.content = content
     post.post_status = status
-    post.date = datetime.datetime.now() - datetime.timedelta(hours=11)
+
+    if post_date is None or post_date == "":
+      post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
+    else:
+      try:
+        sydney_time = datetime.strptime(post_date, "%Y-%m-%d %H:%M:%S")
+        sydney_time = self.sydney_tz.localize(sydney_time)
+
+        post.date = sydney_time.astimezone(pytz.utc)
+      except Exception as e:
+        print(f'convert {post_date} to datetime error: {e}')
+        post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
+
+    print(f'post utc date:{post.date}')
 
     # post.terms_names = {
     #   'post_tag': ['test', 'firstpost'],
@@ -51,4 +67,5 @@ Building wheels for collected packages: python-wordpress-xmlrpc
 
   from newsau.settings import WP_XMLURL, WP_USER, WP_PASSWORD
   wp = WpApi(WP_XMLURL, WP_USER, WP_PASSWORD)
-  wp.post(title, content, tags=["abc", "wordpress"], categories=["news"])
+  date_str = "2025-02-10T04:55:05.000Z"
+  wp.post(title, content, post_date=common.convert_to_datetime(date_str), tags=["abc", "wordpress"], categories=["news"])

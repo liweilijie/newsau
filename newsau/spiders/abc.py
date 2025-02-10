@@ -1,4 +1,5 @@
 from urllib import parse
+import re
 
 import scrapy
 from bs4 import BeautifulSoup
@@ -36,7 +37,6 @@ class AbcSpider(RedisSpider):
         self.mysqlObj = mysqldb.MySqlObj() # for find the object_url_id duplicate
         super().__init__(*args, **kwargs)
 
-
     def parse(self, response):
         self.log(f"I just visited and parse {response.url}")
 
@@ -52,6 +52,11 @@ class AbcSpider(RedisSpider):
             if post_url != "":
                 self.total_urls += 1
                 yield scrapy.Request(url=parse.urljoin(response.url, post_url), meta={"post_first_image_url": post_first_image_url}, callback=self.parse_detail, dont_filter=True)
+
+
+        if len(post_nodes) <= 0:
+            if self._check_detail_page_by_url(response.url) is not None:
+                yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True)
 
         # get the url of sub new and call the callback function to parse
 
@@ -85,6 +90,11 @@ class AbcSpider(RedisSpider):
         if post_content == '':
             post_content = response.xpath('//*[@id="content"]/article/div/div[2]/div/div[1]').extract_first("").strip()
 
+        # data-component = "Timestamp"
+        # datetime = "2025-02-10T04:55:05.000Z"
+        # //*[@id="content"]/article/div/div[1]/div[1]/div[2]/div/time[1]
+        post_time = response.xpath('//time[@data-component="Timestamp"]/@datetime').extract_first("").strip()
+        abc_item["post_date"] = common.convert_to_datetime(post_time)
 
         if post_header != '':
             post_content = post_header + post_content
@@ -97,6 +107,7 @@ class AbcSpider(RedisSpider):
 
         # TODO: check this url_object_id if exist in db
         if self.mysqlObj.query_url_object_id(abc_item["url_object_id"]) is not None:
+            print(f"url: {abc_item['url']} already exist in db nothing to do.")
             return
 
         abc_item["front_image_url"] = []
@@ -110,6 +121,16 @@ class AbcSpider(RedisSpider):
             abc_item["front_image_url"].append(img['src']) # append origin url to download
             img['src'] = common.get_finished_image_url(self.name, abc_item["url_object_id"], img['src']) # replace our website image url from cdn
 
+        # find all a label
+        for a in soup.find_all('a'):
+            # replace all a label with its text
+            a.replace_with(a.text)
+
+        # trim div data-component="EmbedBlock"
+        # soup.find('div', {"data-component":"EmbedBlock"}).decompose()
+        for div in soup.find_all('div', {"data-component":"EmbedBlock"}):
+            div.decompose()
+
         post_content = str(soup)
         abc_item["origin_content"] = post_content
 
@@ -118,3 +139,12 @@ class AbcSpider(RedisSpider):
             yield abc_item
         else:
             print("nothing to do due to invalid item: ", abc_item)
+
+
+    # check if it is detail url or not by search the year-month-day
+    # https://www.abc.net.au/news/2025-02-09/sam-konstas-the-gabba-new-south-wales-queensland/104915602
+    def _check_detail_page_by_url(self, url):
+        m = re.search(r'(20\d{2})[/:-]([0-1]?\d)[/:-]([0-3]?\d)', url)
+        res = ' '.join(m.groups()) if m else None
+        return res
+

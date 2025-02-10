@@ -187,5 +187,5 @@ fabric.properties
 # project
 .venv
 bin.txt
-tt.txt
+test.txt
 newsau/images/full
