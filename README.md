@@ -70,3 +70,9 @@ http_port         = 6800
 logs_dir          = /home/srv/py/news/logs/scarpyd_news.log
 eggs_dir          = /home/srv/py/news/eggs
 ```
+
+## php debug
+
+```php
+error_log(print_r($variable, TRUE)); 
+```

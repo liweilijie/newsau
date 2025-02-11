@@ -17,7 +17,7 @@ import codecs
 from scrapy.utils.project import get_project_settings
 
 from newsau import ai
-from newsau.utils.common import get_image_url_full_path
+from newsau.utils.common import get_image_url_full_path, trip_ai_mistake
 import os
 from newsau.ai import openaiplat
 from newsau.ai import deepseek
@@ -64,12 +64,12 @@ class AbcContentTranslatePipeline(object):
 
         if item["origin_content"] != "":
             tr_content = self.op.retry_translate_content(item["origin_content"])
-            print(tr_content)
+            # print(tr_content)
             if tr_content is None:
                 tr_content = self.dp.retry_translate_content(item["origin_content"])
 
             if tr_content is not None:
-                item["content"] = tr_content
+                item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
 
 
         return item

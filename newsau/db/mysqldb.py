@@ -54,5 +54,5 @@ if __name__ == "__main__":
     mysqlObj = MySqlObj()
     # count = mysqlObj.count_urls_today('abc')
     # print(count)
-    news_category = mysqlObj.get_news_category('abc', 'Unrest, Conflict and War')
+    news_category = mysqlObj.get_news_category('abc', 'Marathon')
     print(news_category)

@@ -51,7 +51,17 @@ def convert_to_datetime(date_str):
         return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S")
 
 
+# trip content the begin ```html and trip the end ```
+def trip_ai_mistake(content):
+    return content.lstrip('```html').rstrip('```')
+
 if __name__ == "__main__":
     print(get_md5("https://news.china.com.au"))
     print(convert_to_datetime("2025-02-10T04:55:05.000Z"))
     print(convert_to_datetime(None))
+
+    content = '```html\n <div>\n<figure class="ContentAlignment_marginBottom__4H_6E ContentAlignment_overflowAuto__c1_IL Figure_figure__xLyBy```'
+    content = (trip_ai_mistake(content))
+    print(content)
+    content = (trip_ai_mistake(content))
+    print(content)
