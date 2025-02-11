@@ -11,8 +11,7 @@ class AbcSchedule(object):
 
     def __init__(self, host):
         # init redis client
-        # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
-        logging.basicConfig(level=logging.DEBUG)
+        logger.info("redis host:%s", host)
         self.host = host
         self.r = redis.Redis(host, decode_responses=True)
 
@@ -26,10 +25,15 @@ class AbcSchedule(object):
         self.r.lpush('abcspider:start_urls', '{ "url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":1}}')
 
 def main():
+    # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    # logging.basicConfig(level=logging.DEBUG)
+
+    logging.basicConfig(level=logging.DEBUG,
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        format='%(asctime)s:%(name)s:%(levelname)s:%(lineno)d:%(module)s:%(message)s')
+    logger.info("start job")
 
     abc_schedule = AbcSchedule("127.0.0.1")
-
-    logger.info("start job")
 
     schedule.every().day.at("08:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("09:00", "Australia/Sydney").do(abc_schedule.justin_job)

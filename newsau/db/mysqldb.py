@@ -1,7 +1,11 @@
 import MySQLdb
 from scrapy.utils.project import get_project_settings
+import logging
 
 SETTING = get_project_settings()
+
+logger = logging.getLogger("mysqldb")
+
 
 class MySqlObj(object):
 
@@ -35,13 +39,15 @@ class MySqlObj(object):
     # find the category of news
     def get_news_category(self, name, topic=None):
         if topic == '' or topic is None:
+            logger.debug(f"name:{name} and empty topic get category:{self.default_category_name}")
             sql = f"select news_category from wp_scrapy_category where source_website = '{name}' and scrapy_category = '{self.default_category_name}'"
         else:
             sql = f"SELECT COALESCE( (SELECT news_category FROM wp_scrapy_category WHERE source_website = '{name}' AND scrapy_category LIKE '%{topic}%' LIMIT 1), (select news_category from wp_scrapy_category where source_website = '{name}' and scrapy_category = '{self.default_category_name}') ) AS news_category"
 
-        print(sql)
         self.cursor.execute(sql)
-        return self.cursor.fetchone()[0]
+        category = self.cursor.fetchone()[0]
+        logger.info(f"on the name:{name} topic:{topic} get category:{category} and sql:{sql}")
+        return category
 
 
 if __name__ == "__main__":

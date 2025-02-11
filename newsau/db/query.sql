@@ -16,3 +16,4 @@ insert into wp_scrapy_category(news_category, scrapy_category, source_website) v
 insert into wp_scrapy_category(news_category, scrapy_category, source_website) values('澳洲新闻', 'Fires', 'abc');
 insert into wp_scrapy_category(news_category, scrapy_category, source_website) values('国际新闻', 'Unrest, Conflict and War', 'abc');
 insert into wp_scrapy_category(news_category, scrapy_category, source_website) values('生活指南', 'Public Transport, Transport, Trains, Events', 'abc');
+insert into wp_scrapy_category(news_category, scrapy_category, source_website) values('人生感悟', 'ABC Lifestyle, Relationships', 'abc');

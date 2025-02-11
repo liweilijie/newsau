@@ -121,6 +121,9 @@ class AbcSpider(RedisSpider):
         post_topic = response.xpath('//*[@id="content"]/article//header//ul/li//p/text()').extract_first("").strip()
         if post_topic == '':
             post_topic = response.css('div[data-component="ArticleWeb"] li a[data-component="SubjectTag"] p::text').extract_first("").strip()
+            # //*[@id="content"]/article/div/div[1]/div/div[2]/ul/li[2]/span/a
+        if post_topic == '':
+            post_topic = response.xpath('//*[@id="content"]/article/div//a[@data-component="InfoSourceTag"]/p/text()').extract_first("").strip()
 
         # post_content_first_image_url = response.css('figure[data-component="Figure"] div img::attr(src)').extract_first("").strip()
 
@@ -179,6 +182,10 @@ class AbcSpider(RedisSpider):
         # soup.find('div', {"data-component":"EmbedBlock"}).decompose()
         for div in soup.find_all('div', {"data-component":"EmbedBlock"}):
             div.decompose()
+
+        # trim span data-component="Loading" data-print="inline-media"
+        for span in soup.find_all('span', {"data-component":"Loading"}):
+            span.decompose()
 
         post_content = str(soup)
         abc_item["origin_content"] = post_content

@@ -2,7 +2,9 @@ from datetime import datetime
 import pytz
 import hashlib
 from newsau.settings import NEWS_ACCOUNTS
+import logging
 
+logger = logging.getLogger("common")
 
 def get_md5(url):
     if isinstance(url, str):
@@ -42,12 +44,10 @@ def convert_to_datetime(date_str):
         sydney_time = utc_time.astimezone(sydney_tz)
 
         mysql_datetime = sydney_time.strftime("%Y-%m-%d %H:%M:%S")
-
-        print(mysql_datetime)
-
+        logger.info(f"convert {date_str} to datetime: {mysql_datetime}")
         return mysql_datetime
     except Exception as e:
-        print(f'convert {date_str} to datetime error: {e}')
+        logger.error(f'convert {date_str} to datetime error: {e}')
         return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S")
 
 
