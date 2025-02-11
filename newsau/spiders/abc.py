@@ -4,13 +4,12 @@ import re
 import scrapy
 from bs4 import BeautifulSoup
 
-# from scrapy import Request
-
 from newsau.items import AbcDataItem
 from newsau.utils import common
 from newsau.db import mysqldb
 from scrapy_redis.spiders import RedisSpider
 from newsau.settings import NEWS_ACCOUNTS
+
 
 
 class AbcSpider(RedisSpider):
@@ -41,16 +40,45 @@ class AbcSpider(RedisSpider):
     def parse(self, response):
         self.log(f"I just visited and parse {response.url}")
 
+        # process like this url: '{ "url": "url", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule":"priority_url"}}'
+        # get meta.schedule and meta.func in request
+        if response.request.meta is not None:
+            schedule = response.request.meta.get("schedule")
+            func = response.request.meta.get("func")
+            if schedule is not None and schedule == "priority_url":
+                if func is not None and func != "":
+                    self.total_urls += 1
+                    self.log(f"direct {schedule} {func} {response.url}")
+                    yield scrapy.Request(url=response.url, callback=func, dont_filter=True)
+                    return
+                else:
+                    self.total_urls += 1
+                    self.log(f"direct {schedule} parse_detail {response.url}")
+                    yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True)
+                    return
+
         post_nodes = response.xpath('//div[@data-component="PaginationList"]//ul/li')
 
-        for post_node in post_nodes[:11]:
-        # for post_node in post_nodes:
+        # process like this url: '{ "url": "url", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule_num":2}}'
+        schedule_num = None
+        once_total = 0
+        if response.request.meta is not None:
+            schedule_num = response.request.meta.get("schedule_num")
+            self.log(f"meta {response.request.meta}")
+
+        # for post_node in post_nodes[:11]:
+        for post_node in post_nodes:
             post_url = post_node.css('h3 a::attr(href)').extract_first("")
             post_title = post_node.css('h3 a::text').extract_first("")
             post_topic = post_node.css('div a[data-component="SubjectTag"] p::text').extract_first("")
             post_first_image_url = post_node.css('div[data-component="Thumbnail"] img::attr(src)').extract_first("").strip()
 
             if post_url != "":
+                if schedule_num is not None and once_total >= schedule_num:
+                    self.log(f"schedule {once_total} >= {schedule_num} and nothing to do.")
+                    break
+
+                once_total += 1
                 self.total_urls += 1
                 yield scrapy.Request(url=parse.urljoin(response.url, post_url), meta={"post_first_image_url": post_first_image_url}, callback=self.parse_detail, dont_filter=True)
 

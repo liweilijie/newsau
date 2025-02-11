@@ -44,7 +44,7 @@ class AbcContentTranslatePipeline(object):
 
     def process_item(self, item, spider):
 
-        # # for test
+        # # for test emacsvi.com
         # item["title"] = item["origin_title"]
         # item["content"] = item["origin_content"]
         # return item
