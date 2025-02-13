@@ -156,7 +156,7 @@ class AbcSpider(RedisSpider):
         abc_item["url_object_id"] = common.get_md5(abc_item["url"])
 
         # TODO: check this url_object_id if exist in db
-        if self.mysqlObj.query_url_object_id(abc_item["url_object_id"]) is not None:
+        if self.mysqlObj.query_url_object_id(self.name, abc_item["url_object_id"]) is not None:
             print(f"url: {abc_item['url']} already exist in db nothing to do.")
             return
 

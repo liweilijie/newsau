@@ -34,6 +34,7 @@ class NewsauPipeline:
     def process_item(self, item, spider):
         return item
 
+
 class AbcContentTranslatePipeline(object):
 
     def __init__(self):
@@ -58,19 +59,17 @@ class AbcContentTranslatePipeline(object):
                 # tr_title remove newline
                 tr_title = tr_title.replace("\n", "")
                 # print origin_title translate to title
-                print(f"{item['origin_title']}=>{tr_title}")
-                print(f"{tr_title}")
+                logger.info(f"{item['origin_title']}=>{tr_title}")
                 item["title"] = tr_title
 
         if item["origin_content"] != "":
             tr_content = self.op.retry_translate_content(item["origin_content"])
-            # print(tr_content)
             if tr_content is None:
                 tr_content = self.dp.retry_translate_content(item["origin_content"])
 
+            logger.info(f'tr_content:{tr_content}')
             if tr_content is not None:
                 item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
-
 
         return item
 
@@ -91,9 +90,12 @@ class AbcImagePipeline(ImagesPipeline):
         if "front_image_path" not in item:
             item["front_image_path"] = []
 
+        logger.debug(f'abc Image item:{item}')
         if "front_image_url" in item:
             for ok, value in results:
-                item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]['image_cdn_domain']}{value["path"]}')
+                logger.debug(f'ok:{ok}, value:{value}')
+                if isinstance(value, dict) and 'path' in value:
+                    item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]['image_cdn_domain']}{value["path"]}')
 
         return item
 

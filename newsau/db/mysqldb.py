@@ -22,11 +22,16 @@ class MySqlObj(object):
         self.cursor = self.conn.cursor()
         self.default_category_name = 'default'
 
-    def query_url_object_id(self, url_object_id):
-        sql = f"SELECT url_object_id FROM wp_scrapy_news WHERE url_object_id = '{url_object_id}' limit 1"
+    # TODO: maybe should by name, fix it next time.
+    def query_url_object_id(self, name, url_object_id):
+        sql = f"SELECT url_object_id FROM wp_scrapy_news WHERE url_object_id = '{url_object_id}' and name = '{name}' limit 1"
+        logger.info(f'sql:{sql}')
         self.cursor.execute(sql)
+        self.conn.commit()
         # return self.cursor.fetchall()
-        return self.cursor.fetchone()
+        rt = self.cursor.fetchone()
+        logger.info(f'rt:{rt}')
+        return rt
 
 
     # find the total count of post at today
@@ -34,6 +39,7 @@ class MySqlObj(object):
         # SELECT COUNT(*) AS total_posts_today FROM your_table WHERE DATE(scrapy_date) = CURDATE();
         sql = f"SELECT count(*) FROM wp_scrapy_news WHERE name = '{name}' and DATE(scrapy_date) = CURDATE()"
         self.cursor.execute(sql)
+        self.conn.commit()
         return self.cursor.fetchone()[0]
 
     # find the category of news
@@ -45,6 +51,7 @@ class MySqlObj(object):
             sql = f"SELECT COALESCE( (SELECT news_category FROM wp_scrapy_category WHERE source_website = '{name}' AND scrapy_category LIKE '%{topic}%' LIMIT 1), (select news_category from wp_scrapy_category where source_website = '{name}' and scrapy_category = '{self.default_category_name}') ) AS news_category"
 
         self.cursor.execute(sql)
+        self.conn.commit()
         category = self.cursor.fetchone()[0]
         logger.info(f"on the name:{name} topic:{topic} get category:{category} and sql:{sql}")
         return category
@@ -52,7 +59,9 @@ class MySqlObj(object):
 
 if __name__ == "__main__":
     mysqlObj = MySqlObj()
+    rt = mysqlObj.query_url_object_id('afr', 'tt1234')
+    print(rt)
     # count = mysqlObj.count_urls_today('abc')
     # print(count)
-    news_category = mysqlObj.get_news_category('abc', 'Marathon')
-    print(news_category)
+    # news_category = mysqlObj.get_news_category('abc', 'Marathon')
+    # print(news_category)

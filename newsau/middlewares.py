@@ -2,11 +2,21 @@
 #
 # See documentation in:
 # https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+import logging
+import pickle
+import time
 
 from scrapy import signals
+import undetected_chromedriver as uc
+import selenium.webdriver.support.expected_conditions as EC  # noqa
 
 # useful for handling different item types with a single interface
 from itemadapter import is_item, ItemAdapter
+from scrapy.http import HtmlResponse
+from selenium.webdriver.remote.webdriver import By
+from selenium.webdriver.support.wait import WebDriverWait
+
+logger = logging.getLogger('liwmiddleware')
 
 
 class NewsauSpiderMiddleware:
@@ -101,3 +111,44 @@ class NewsauDownloaderMiddleware:
 
     def spider_opened(self, spider):
         spider.logger.info("Spider opened: %s" % spider.name)
+
+
+class NewsSeleniumMiddleware(object):
+
+    def __init__(self, timeout=50):
+        self.cookies = pickle.load(open("cookies.pkl", "rb"))
+        logger.info(f'pickup cookies:{self.cookies}')
+        self.driver = uc.Chrome(headless=True, use_subprocess=True)
+        self.add_cookie_flg = False
+        # for c in self.cookies:
+        #     logger.info(f'add cookie:{c}')
+        #     self.driver.add_cookie(c)
+        self.timeout = timeout
+        self.wait = WebDriverWait(self.driver, self.timeout)
+
+    def __del__(self):
+        self.driver.close()
+
+
+    def process_request(self, request, spider):
+        if spider.name == "afr":
+
+            # just do once.
+            if self.add_cookie_flg == False:
+                self.driver.get(spider.home_url)
+                self.add_cookie_flg = True
+                for c in self.cookies:
+                    logger.info(f'add cookie:{c}')
+                    self.driver.add_cookie(c)
+
+            logger.info('afr selenium middleware.')
+            self.driver.get(request.url)
+            # self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.media-info-title-t')))
+            time.sleep(5)
+            self.driver.save_screenshot('tt.png')
+            url = self.driver.current_url
+            body = self.driver.page_source
+            return HtmlResponse(url=url, body=body, encoding='utf-8', request=request)
+
+        elif spider.name == "abc":
+            logger.info('abc selenium middleware.')
