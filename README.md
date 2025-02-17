@@ -5,6 +5,16 @@ my project about news of Australia to download.
 # deploy
 
 ```bash
+python3 -m venv news
+sudo apt install python3.12-venv
+python3 -m venv news
+source news/bin/activate
+
+pip list
+pip freeze > requirements.txt
+pip install -r requirements.txt
+deactivate
+
 pip freeze > requirments.txt
 # pip install -r requirements.txt 
 sudo apt-get install pkg-config python3-dev default-libmysqlclient-dev build-essential
@@ -18,11 +28,16 @@ cat /etc/supervisor/supervisord.conf
 vim scrapyd_supervisor.conf
 sudo cp scrapyd_supervisor.conf /etc/supervisor/conf.d/
 
+sudo mkdir -p /home/bk/py/news/logs
 sudo mkdir -p /etc/scrapyd
 sudo cp scrapyd.conf /etc/scrapyd/
+sudo cp scrapyd_supervisor.conf /etc/supervisor/conf.d/
+sudo cp push_url_supervisor.conf /etc/supervisor/conf.d/
 
 sudo supervisorctl reread
 sudo supervisorctl update
+
+pip install scrapyd
 
 scrapyd-deploy news
 
@@ -75,4 +90,33 @@ eggs_dir          = /home/srv/py/news/eggs
 
 ```php
 error_log(print_r($variable, TRUE)); 
+```
+
+## ubuntu server install chrome and chromedriver
+
+```bash
+# download chrome latest version
+sudo apt update
+sudo apt upgrade
+wget -nc https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install -f ./google-chrome-stable_current_amd64.deb
+google-chrome --version
+
+# download chrome driver
+wget https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.98/linux64/chromedriver-linux64.zip
+unzip chromedriver-linux64.zip
+sudo mv chromedriver-linux64/chromedriver /usr/bin/
+ls -lhta /usr/bin/chromedriver
+sudo chown root:root /usr/bin/chromedriver
+sudo chmod +x /usr/bin/chromedriver
+# to test
+chromedriver --url-base=/wd/hub
+```
+
+## python env
+
+在supervisor配置文件中添加一行配置，指定supervisor启动加载的python环境：
+
+```ini
+environment=PYTHONPATH='/home/ec2-user/.local/lib/python3.6/site-packages/'
 ```

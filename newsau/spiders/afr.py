@@ -1,16 +1,12 @@
 import pickle
 import time
-from typing import Any
 
 import scrapy
 from bs4 import BeautifulSoup
 import logging
 
-from scrapy.http import Response
-
 from newsau.items import AfrDataItem
 from newsau.utils import common
-from newsau.db import mysqldb
 from newsau.settings import NEWS_ACCOUNTS
 from scrapy_redis.spiders import RedisSpider
 import undetected_chromedriver as uc
@@ -21,6 +17,7 @@ from scrapy.selector import Selector
 from newsau.settings import AFR_USER, AFR_PASSWORD
 from urllib.parse import urljoin
 from newsau.parse import afrparse
+from newsau.db import orm
 
 logger = logging.getLogger('afr')
 
@@ -47,7 +44,6 @@ class AfrSpider(RedisSpider):
         # Be careful primary domain maybe contain other domain to store the image src, so you must remember allowed the domains.
         domain = kwargs.pop("afr.com", "static.ffx.io")
         self.allowed_domains = filter(None, domain.split(","))
-        self.mysqlObj = mysqldb.MySqlObj() # for find the object_url_id duplicate
         self.home_url = "afr.com"
         self.domain = "https://www.afr.com/"
 
@@ -59,7 +55,7 @@ class AfrSpider(RedisSpider):
         self.user = AFR_USER
         self.password = AFR_PASSWORD
         # TODO: use_subprocess
-        self.driver = uc.Chrome(headless=False, use_subprocess=False)
+        self.driver = uc.Chrome(headless=True, use_subprocess=False)
         self.wait = WebDriverWait(self.driver, 20)
         self.is_login = False
         self.js = "window.scrollTo(0, document.body.scrollHeight)"
@@ -100,6 +96,11 @@ class AfrSpider(RedisSpider):
         self.driver.close()
 
     def parse(self, response):
+
+        if orm.check_if_exceed_num(self.name):
+            logger.info('exceed and return.')
+            return
+
         self.loop_login()
 
         if not self.is_login:
@@ -108,7 +109,8 @@ class AfrSpider(RedisSpider):
 
         logger.info(f'we start get {response.url}')
 
-        if not response.url.rstrip('/').endswith(self.home_url):
+        # if not response.url.rstrip('/').endswith(self.home_url):
+        if afrparse.contains_date(response.url):
             self.total_urls += 1
             logger.info(f'total_urls:{self.total_urls} and {response.url} not in {self.home_url} and detail_parse to process.')
             yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True)
@@ -126,21 +128,29 @@ class AfrSpider(RedisSpider):
 
         body = Selector(text=page_text)
 
-        sections = body.xpath('//*[@id="content"]/section[2]')
+        sections = body.xpath('//*[@id="content"]/section[2]//a/@href').extract()
 
-        for a in sections.xpath('//a/@href').extract():
+        total = 0
+        for a in sections:
             url = urljoin(self.domain, a)
             if afrparse.contains_date(url):
                 logger.info(f'a:{url}')
                 self.total_urls += 1
-                logger.info(f'total_urls:{self.total_urls} and process:{url}')
-                yield scrapy.Request(url=url, callback=self.detail_parse, dont_filter=True)
-
+                total += 1
+                logger.info(f'total_urls:{self.total_urls} this time find total: {total} and process:{url}')
+                # if self.total_urls > 2:
+                #     logger.info('total_urls return.')
+                #     return
+                if not orm.check_if_exceed_num(self.name):
+                    yield scrapy.Request(url=url, callback=self.detail_parse, dont_filter=True)
+                else:
+                    logger.info('exceed and return.')
+                    return
 
 
     def detail_parse(self, response):
 
-        current_count = self.mysqlObj.count_urls_today(self.name)
+        current_count = orm.count_urls_today(self.name)
 
         if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
             self.log(f"afr we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
@@ -153,7 +163,7 @@ class AfrSpider(RedisSpider):
             logger.info('this website is not login so nothing to do.')
             return
 
-        logger.info(f'we start get {response.url}')
+        logger.info(f'detail_parse we start get {response.url}')
 
         self.driver.get(response.url)
 
@@ -168,7 +178,7 @@ class AfrSpider(RedisSpider):
         except Exception as e:
             logger.error(f"wait endOfArticle error:{e}")
 
-        self.driver.save_screenshot('t3.png')
+        # self.driver.save_screenshot('t3.png')
 
         # js = "window.scrollTo(0, document.body.scrollHeight)"
         self.driver.execute_script(self.js)
@@ -205,11 +215,12 @@ class AfrSpider(RedisSpider):
         else:
             post_content = post_sub_title
 
-        post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
+        post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
         logger.info(f'post_time:{post_time}')
         if post_time == '' or post_time is None:
             # //*[@id="content"]/div[1]/section/section/section/div[1]/time
-            post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
+            # //*[@id="content"]/div[1]/section/section/section/div[1]/time
+            post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
 
         post_author = body.xpath('//*[@id="content"]/header/span/span[1]/strong/a/text()').extract_first('').strip()
         logger.info(f'post_author:{post_author}')
@@ -257,10 +268,10 @@ class AfrSpider(RedisSpider):
         afr_item["topic"] = 'financial'
         afr_item["url"] = response.url
         afr_item["url_object_id"] = common.get_md5(afr_item["url"])
-        afr_item["post_date"] = common.afr_convert_to_datetime(afr_item["post_time"])
+        afr_item["post_date"] = common.afr_convert_to_datetime(afr_item.get("post_time", ""))
 
         # TODO: check this url_object_id if exist in db
-        if self.mysqlObj.query_url_object_id(self.name, afr_item["url_object_id"]) is not None:
+        if orm.query_object_id(self.name, afr_item["url_object_id"]):
             logger.warning(f"url: {afr_item['url']} already exist in db nothing to do.")
             return
 

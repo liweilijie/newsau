@@ -6,9 +6,9 @@ from bs4 import BeautifulSoup
 
 from newsau.items import AbcDataItem
 from newsau.utils import common
-from newsau.db import mysqldb
 from scrapy_redis.spiders import RedisSpider
 from newsau.settings import NEWS_ACCOUNTS
+from newsau.db import orm
 
 
 
@@ -34,7 +34,6 @@ class AbcSpider(RedisSpider):
         # Be careful primary domain maybe contain other domain to store the image src, so you must remember allowed the domains.
         domain = kwargs.pop("abc.net.au", "live-production.wcms.abc-cdn.net.au")
         self.allowed_domains = filter(None, domain.split(","))
-        self.mysqlObj = mysqldb.MySqlObj() # for find the object_url_id duplicate
         super().__init__(*args, **kwargs)
 
     def parse(self, response):
@@ -99,13 +98,13 @@ class AbcSpider(RedisSpider):
     # scrapy shell to manual code the css selector
     def parse_detail(self, response):
 
-        current_count = self.mysqlObj.count_urls_today(self.name)
+        current_count = orm.count_urls_today(self.name)
 
         if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
             self.log(f"we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
             return
 
-        self.log(f"I just visited detail {response.url}")
+        self.log(f"I just visited parse detail {response.url}")
 
         abc_item = AbcDataItem()
         abc_item["name"] = self.name
@@ -156,11 +155,11 @@ class AbcSpider(RedisSpider):
         abc_item["url_object_id"] = common.get_md5(abc_item["url"])
 
         # TODO: check this url_object_id if exist in db
-        if self.mysqlObj.query_url_object_id(self.name, abc_item["url_object_id"]) is not None:
+        if orm.query_object_id(self.name, abc_item["url_object_id"]):
             print(f"url: {abc_item['url']} already exist in db nothing to do.")
             return
 
-        abc_item["category"] = self.mysqlObj.get_news_category(self.name, abc_item["topic"])
+        # abc_item["category"] = orm.get_category(self.name, abc_item["topic"])
 
         abc_item["front_image_url"] = []
 

@@ -12,6 +12,68 @@ class DeepSeekApi(object):
         self.base_url = base_url
         # self.client = OpenAI(api_key=api_key, base_url=base_url)
 
+        self.categories = ["国际新闻", "生活指南", "社论点评", "健康医药", "旅游、娱乐", "房产、物业", "国际新闻", "澳洲新闻", "人生感悟", "澳洲新闻"]
+
+    def retry_generate_category(self, tr_content, max_retries=5, delay=2):
+
+        start_time = time.time()
+        retries = 0
+        cate = ",".join(self.categories)
+        while retries < max_retries:
+            try:
+                print(f"generate category the {retries}th retry")
+
+                completion = self.client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"请你从给出的新闻内容里面归纳总结出新闻分类，新闻分类只能从这个列表里面选择一个:{cate}"
+                        },
+                        {
+                            "role": "user",
+                            "content": tr_content
+                        }
+                    ],
+                    max_tokens=1024,
+                    temperature=1.0,
+                    stream=False
+                )
+                end_time = time.time()
+                total_time = end_time - start_time
+                print(f"generate category took total time：{total_time:.2f} s")
+
+                if completion is None:
+                    raise ValueError("API return is None.")
+
+                # check choices
+                if not hasattr(completion, 'choices') or not completion.choices:
+                    raise ValueError("API return is not include choices or choices is empty.")
+
+                # check message if exist
+                if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                    raise ValueError("API miss message or message is empty.")
+
+                # check content if exist
+                if not hasattr(completion.choices[0].message, 'content') or not completion.choices[0].message.content:
+                    raise ValueError("API miss content or content is empty.")
+
+                # successful
+                print(completion)
+                return completion.choices[0].message.content
+
+            except Exception as e:
+                print(f"generate category {retries} happened error: {e}")
+
+            retries += 1
+            print(f"generate category failed and we will sleep and try again: {retries}th.")
+            if retries < max_retries:
+                time.sleep(delay)
+            else:
+                print(f"finally we translated too many times {max_retries} and give up this translator.")
+                return None
+
+
     def retry_translate_title(self, tr_title, max_retries=10, delay=2):
 
         client = OpenAI(api_key=self.api_key, base_url=self.base_url)

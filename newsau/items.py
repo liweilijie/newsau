@@ -4,6 +4,8 @@
 # https://docs.scrapy.org/en/latest/topics/items.html
 
 import scrapy
+
+from newsau.db.models import WPScrapyNews
 from newsau.utils import common
 
 
@@ -26,6 +28,27 @@ class AbcDataItem(scrapy.Item):
     content = scrapy.Field()
     post_date = scrapy.Field()
     scrapy_date = scrapy.Field()
+
+    def convert_to_wp_news(self):
+        if self.get("title", "") == "" or self.get("content", "") == "":
+            return None
+
+        return WPScrapyNews(
+            name=self.get("name", ""),
+            origin_title=self.get("origin_title", ""),
+            title=self.get("title", ""),
+            topic=self.get("topic", ""),
+            category=self.get("category", ""),
+            url=self.get("url", ""),
+            url_object_id=self.get("url_object_id", ""),
+            front_image_url=",".join(self.get("front_image_url", ["empty"])),
+            front_image_path=",".join(self.get("front_image_path", ["empty"])),
+            origin_content=self.get("origin_content", ""),
+            content=self.get("content", ""),
+            post_date=self.get("post_date", common.convert_to_datetime(None)),
+            scrapy_date=self.get("scrapy_date", common.convert_to_datetime(None)),
+            )
+
 
     def get_insert_sql(self):
 
@@ -85,6 +108,27 @@ class AfrDataItem(scrapy.Item):
     content = scrapy.Field()
     post_date = scrapy.Field()
     scrapy_date = scrapy.Field()
+
+    def convert_to_wp_news(self):
+        if self.get("title", "") == "" or self.get("content", "") == "":
+            return None
+
+        return WPScrapyNews(
+            name=self.get("name", ""),
+            origin_title=self.get("origin_title", ""),
+            title=self.get("title", ""),
+            topic=self.get("topic", ""),
+            category=self.get("category", ""),
+            url=self.get("url", ""),
+            url_object_id=self.get("url_object_id", ""),
+            front_image_url=",".join(self.get("front_image_url", ["empty"])),
+            front_image_path=",".join(self.get("front_image_path", ["empty"])),
+            origin_content=self.get("origin_content", ""),
+            content=self.get("content", ""),
+            post_date=self.get("post_date", common.convert_to_datetime(None)),
+            scrapy_date=self.get("scrapy_date", common.convert_to_datetime(None)),
+        )
+
 
     def get_insert_sql(self):
 

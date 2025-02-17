@@ -2,6 +2,8 @@ import MySQLdb
 from scrapy.utils.project import get_project_settings
 import logging
 
+from newsau.settings import NEWS_ACCOUNTS
+
 SETTING = get_project_settings()
 
 logger = logging.getLogger("mysqldb")
@@ -33,6 +35,15 @@ class MySqlObj(object):
         logger.info(f'rt:{rt}')
         return rt
 
+    # check if exceed
+    def check_if_exceed_num(self, name):
+        current_count = self.count_urls_today(name)
+
+        if current_count >= NEWS_ACCOUNTS[name]["count_everyday"]:
+            logger.info(
+                f"afr we had {current_count} >= {NEWS_ACCOUNTS[name]["count_everyday"]} and exceed the count limit and do nothing.")
+            return True
+        return False
 
     # find the total count of post at today
     def count_urls_today(self, name):
@@ -40,7 +51,10 @@ class MySqlObj(object):
         sql = f"SELECT count(*) FROM wp_scrapy_news WHERE name = '{name}' and DATE(scrapy_date) = CURDATE()"
         self.cursor.execute(sql)
         self.conn.commit()
-        return self.cursor.fetchone()[0]
+        logger.info(f'sql:{sql}')
+        rt = self.cursor.fetchone()[0]
+        logger.info(f'sql:{sql} and count:{rt}')
+        return rt
 
     # find the category of news
     def get_news_category(self, name, topic=None):

@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 
-from scrapy.pipelines.files import GCSFilesStore, FilesPipeline
 from twisted.enterprise import adbapi
 import MySQLdb
 from scrapy.exporters import JsonItemExporter
@@ -15,8 +14,8 @@ from scrapy.pipelines.images import ImagesPipeline
 import codecs
 
 from scrapy.utils.project import get_project_settings
+from newsau.db import orm
 
-from newsau import ai
 from newsau.utils.common import get_image_url_full_path, trip_ai_mistake
 import os
 from newsau.ai import openaiplat
@@ -45,6 +44,9 @@ class AbcContentTranslatePipeline(object):
 
     def process_item(self, item, spider):
 
+        if orm.check_if_exceed_num(item["name"]):
+            return item
+
         # # for test emacsvi.com
         # item["title"] = item["origin_title"]
         # item["content"] = item["origin_content"]
@@ -71,6 +73,15 @@ class AbcContentTranslatePipeline(object):
             if tr_content is not None:
                 item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
 
+        # generate category
+        category = self.op.retry_generate_category(item["origin_content"])
+        if category is None:
+            category = self.dp.retry_generate_category(item["origin_content"])
+
+        if category is not None:
+            logger.info(f"generate category:{category}")
+            item["category"] = category
+
         return item
 
 
@@ -96,6 +107,25 @@ class AbcImagePipeline(ImagesPipeline):
                 logger.debug(f'ok:{ok}, value:{value}')
                 if isinstance(value, dict) and 'path' in value:
                     item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]['image_cdn_domain']}{value["path"]}')
+
+        return item
+
+
+class SaveToMySqlPipeline(object):
+
+    def __init__(self):
+        self.wp = WpApi(SETTING['WP_XMLURL'], SETTING['WP_USER'], SETTING['WP_PASSWORD'])
+
+
+    def process_item(self, item, spider):
+
+        if orm.check_if_exceed_num(item["name"]):
+            return item
+
+        obj = item.convert_to_wp_news()
+        if obj is not None:
+            if orm.create_post(obj):
+                self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
 
         return item
 

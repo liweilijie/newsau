@@ -9,11 +9,11 @@ logger = logging.getLogger("schedule")
 
 class AbcSchedule(object):
 
-    def __init__(self, host):
+    def __init__(self):
         # init redis client
-        logger.info("redis host:%s", host)
-        self.host = host
-        self.r = redis.Redis(host, decode_responses=True)
+        # logger.info("redis host:%s", host)
+        # self.host = host
+        self.r = redis.Redis(host='localhost', port=6379, db=2, decode_responses=True)
 
     def priority_url(self, url):
         # lpush abcspider:start_urls '{ "url": "https://www.abc.net.au/news/2025-02-10/trump-to-announce-new-tariffs-on-steel-and-aluminium/104917334", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule":"priority_url"}}'
@@ -23,6 +23,7 @@ class AbcSchedule(object):
         # lpush abcspider:start_urls '{ "url": "https://www.abc.net.au/news/justin", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule_num":2} }'
         logger.info("justin lpush https://www.abc.net.au/news/justin")
         self.r.lpush('abcspider:start_urls', '{ "url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":1}}')
+        # self.r.lpush('abcspider:start_urls', '{ "url": "https://www.abc.net.au/news/justin"}')
 
 def main():
     # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
@@ -31,10 +32,12 @@ def main():
     logging.basicConfig(level=logging.DEBUG,
                         datefmt='%Y-%m-%d %H:%M:%S',
                         format='%(asctime)s:%(name)s:%(levelname)s:%(lineno)d:%(module)s:%(message)s')
-    logger.info("start job")
+    logger.info("new redis 2 start job")
 
-    abc_schedule = AbcSchedule("127.0.0.1")
+    abc_schedule = AbcSchedule()
+    abc_schedule.justin_job()
 
+    schedule.every().day.at("07:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("08:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("09:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("10:00", "Australia/Sydney").do(abc_schedule.justin_job)
@@ -48,6 +51,7 @@ def main():
     schedule.every().day.at("18:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("19:00", "Australia/Sydney").do(abc_schedule.justin_job)
     schedule.every().day.at("20:00", "Australia/Sydney").do(abc_schedule.justin_job)
+    schedule.every().day.at("21:00", "Australia/Sydney").do(abc_schedule.justin_job)
 
     # schedule.every(10).minutes.do(job)
     # schedule.every().hour.do(job)

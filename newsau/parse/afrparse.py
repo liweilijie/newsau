@@ -17,12 +17,16 @@ def afr_parse_home(html):
     home = "https://www.afr.com/"
     body = Selector(text=html)
 
-    sections = body.xpath('//*[@id="content"]/section[2]')
+    sections = body.xpath('//*[@id="content"]/section[2]//a/@href').extract()
 
-    for a in sections.xpath('//a/@href').extract():
+    total = 0
+    for a in sections:
+        # for a in sections.xpath('//a/@href').extract():
         url = urljoin(home, a)
         if contains_date(url):
             logger.info(f'a:{url}')
+            total += 1
+    print(len(sections), total)
 
     print(sections)
 
@@ -56,11 +60,11 @@ def afr_parse_detail(html):
     else:
         post_content = post_sub_title
 
-    post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
+    post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
     logger.info(f'post_time:{post_time}')
     if post_time == '' or post_time is None:
         # //*[@id="content"]/div[1]/section/section/section/div[1]/time
-        post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
+        post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
 
     post_author = body.xpath('//*[@data-testid="AuthorURL"]/text()').extract_first('').strip()
     logger.info(f'post_author:{post_author}')
@@ -112,7 +116,7 @@ def afr_parse_detail(html):
 
     # 'Feb 12, 2025 – 10.41am'
     # afr_item["post_date"] = common.convert_to_datetime(post_time)
-    afr_item["post_date"] = common.convert_to_datetime(None)
+    afr_item["post_date"] = common.afr_convert_to_datetime(afr_item.get("post_time", ""))
 
     # self.mysqlObj.get_news_category(self.name, afr_item["topic"])
     afr_item["category"] = "投资、理财"
@@ -195,10 +199,10 @@ def url_join_t():
 
 
 if __name__ == "__main__":
-    # content = pickle.load(open("../../p1.html", "rb"))
-    # rt = afr_parse_detail(content)
-    # logger.info(rt)
-    # url_join_t()
-    content = pickle.load(open("../../home.html", "rb"))
-    rt = afr_parse_home(content)
+    content = pickle.load(open("../../p1.html", "rb"))
+    rt = afr_parse_detail(content)
     logger.info(rt)
+    # url_join_t()
+    # content = pickle.load(open("../../home.html", "rb"))
+    # rt = afr_parse_home(content)
+    # logger.info(rt)

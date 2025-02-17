@@ -13,6 +13,65 @@ class OpenAiPlat(object):
     def __init__(self):
 
         self.client = OpenAI()
+        self.categories = ["国际新闻", "中国新闻", "生活指南", "社论点评", "健康医药", "旅游、娱乐", "房产、物业", "国际新闻", "澳洲新闻", "人生感悟", "澳洲新闻", "华人参政", "华人活动", "投资、理财", "教育、留学", "宗教、信仰", "文学世界", "生命探索", "生活品味", "美食养生", "饮食文化"]
+
+    def retry_generate_category(self, tr_content, max_retries=5, delay=2):
+
+        start_time = time.time()
+        retries = 0
+        cate = ",".join(self.categories)
+        while retries < max_retries:
+            try:
+                print(f"generate category the {retries}th retry")
+
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"请你从给出的新闻内容里面归纳总结出新闻分类，新闻分类只能从这个列表({cate})里面选择一个，结果不要包含新闻分类字样，只要列表里面的分类。"
+                        },
+                        {
+                            "role": "user",
+                            "content": tr_content
+                        }
+                    ],
+                )
+                end_time = time.time()
+                total_time = end_time - start_time
+                print(f"generate category took total time：{total_time:.2f} s")
+
+                if completion is None:
+                    raise ValueError("API return is None.")
+
+                # check choices
+                if not hasattr(completion, 'choices') or not completion.choices:
+                    raise ValueError("API return is not include choices or choices is empty.")
+
+                # check message if exist
+                if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                    raise ValueError("API miss message or message is empty.")
+
+                # check content if exist
+                if not hasattr(completion.choices[0].message, 'content') or not completion.choices[0].message.content:
+                    raise ValueError("API miss content or content is empty.")
+
+                # successful
+                print(completion)
+                return completion.choices[0].message.content
+
+            except Exception as e:
+                print(f"generate category {retries} happened error: {e}")
+
+            retries += 1
+            print(f"generate category failed and we will sleep and try again: {retries}th.")
+            if retries < max_retries:
+                time.sleep(delay)
+            else:
+                print(f"finally we translated too many times {max_retries} and give up this translator.")
+                return None
+
+
 
     def retry_translate_title(self, tr_title, max_retries=8, delay=2):
 
@@ -84,7 +143,7 @@ class OpenAiPlat(object):
                     messages=[
                         {
                             "role": "system",
-                            "content": "你是一个中英文翻译专家，用户会利用爬虫技术爬取很多新闻类的网页内容，用户想将内容翻译成中文，翻译的时候保留html标签，并且在内容的最后总结全篇的思想，总结性的内容用单独一个div标签包裹，另外不用出来总结两个字，总结性的中文内容不超过200字。翻译的内容要确保符合中文语言习惯，利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。同时作为翻译家，需将原文翻译成具有信达雅标准的译文。\"信\" 即忠实于原文的内容与意图；\"达\" 意味着译文应通顺易懂，表达清晰；\"雅\" 则追求译文的文化审美和语言的优美。目标是创作出既忠于原作精神，又符合目标语言文化和读者审美的翻译。"
+                            "content": "你是一个中英文翻译专家，用户想将内容翻译成中文，翻译的时候保留html标签，并且在内容的最后总结全篇的思想，总结性的内容用单独一个div标签包裹，另外不用出来总结两个字，总结性的中文内容不超过200字。翻译的内容要确保符合中文语言习惯，利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。同时作为翻译家，需将原文翻译成具有信达雅标准的译文。\"信\" 即忠实于原文的内容与意图；\"达\" 意味着译文应通顺易懂，表达清晰；\"雅\" 则追求译文的文化审美和语言的优美。目标是创作出既忠于原作精神，又符合目标语言文化和读者审美的翻译。"
                         },
                         {
                             "role": "user",
@@ -135,5 +194,5 @@ if __name__ == "__main__":
 
     title = "acqui Lambie rails against unfair dismissal laws, after claim by staffer she says 'painted nails at their desk'"
     op = OpenAiPlat()
-    print(op.retry_translate_title(title))
+    # print(op.retry_translate_title(title))
     print(op.retry_translate_content(content))
