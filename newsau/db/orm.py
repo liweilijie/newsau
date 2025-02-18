@@ -6,7 +6,7 @@ from newsau.db.models import WPScrapyNews, WPScrapyCategory
 from sqlalchemy import and_
 from sqlalchemy import func
 
-from newsau.settings import NEWS_ACCOUNTS
+from newsau.cache.rsync_status import accounts_store
 
 logger = logging.getLogger("mysql")
 
@@ -85,9 +85,9 @@ def get_category(name, topic):
 def check_if_exceed_num(name):
     current_count = count_urls_today(name)
 
-    if current_count >= NEWS_ACCOUNTS[name]["count_everyday"]:
+    if current_count >= accounts_store.get()[name]["count_everyday"]:
         logger.info(
-            f"afr we had {current_count} >= {NEWS_ACCOUNTS[name]["count_everyday"]} and exceed the count limit and do nothing.")
+            f"afr we had {current_count} >= {accounts_store.get()[name]["count_everyday"]} and exceed the count limit and do nothing.")
         return True
     return False
 

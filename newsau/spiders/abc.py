@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup
 from newsau.items import AbcDataItem
 from newsau.utils import common
 from scrapy_redis.spiders import RedisSpider
-from newsau.settings import NEWS_ACCOUNTS
 from newsau.db import orm
 
 
@@ -98,10 +97,7 @@ class AbcSpider(RedisSpider):
     # scrapy shell to manual code the css selector
     def parse_detail(self, response):
 
-        current_count = orm.count_urls_today(self.name)
-
-        if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
-            self.log(f"we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
+        if orm.check_if_exceed_num(self.name):
             return
 
         self.log(f"I just visited parse detail {response.url}")

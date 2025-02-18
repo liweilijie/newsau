@@ -14,6 +14,7 @@ from scrapy.pipelines.images import ImagesPipeline
 import codecs
 
 from scrapy.utils.project import get_project_settings
+
 from newsau.db import orm
 
 from newsau.utils.common import get_image_url_full_path, trip_ai_mistake

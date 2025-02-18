@@ -7,7 +7,6 @@ import logging
 
 from newsau.items import AfrDataItem
 from newsau.utils import common
-from newsau.settings import NEWS_ACCOUNTS
 from scrapy_redis.spiders import RedisSpider
 import undetected_chromedriver as uc
 import selenium.webdriver.support.expected_conditions as EC  # noqa
@@ -24,8 +23,6 @@ logger = logging.getLogger('afr')
 class AfrSpider(RedisSpider):
     name = "afr"
     home_url = "https://afr.com"
-    # allowed_domains = ["afr.com"]
-    # start_urls = ["https://afr.com"]
     custom_settings = {
         'COOKIES_ENABLED': True,
         'USER_AGENT': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
@@ -66,31 +63,7 @@ class AfrSpider(RedisSpider):
 
         }
 
-        # try:
-        #     self.cookies = pickle.load(open("cookies.pkl", "rb"))
-        # except Exception as e:
-        #     logger.error(f"pickup load cookies error:{e}")
-        #     self.cookies = None
-        #
-        # if self.cookies is None:
-        #     raise "cookies cannot find."
-        #
-        # logger.info(f'read cookies:{self.cookies}')
-
-
-        # self.mysqlObj = mysqldb.MySqlObj() # for find the object_url_id duplicate
         super().__init__(*args, **kwargs)
-
-
-    # def start_requests(self):
-    #     self.login()
-    #
-    #     url = 'https://www.afr.com/world/middle-east/trump-may-be-wrong-about-many-things-but-he-s-right-about-hamas-20250212-p5lbgn'
-    #     yield scrapy.Request(url=url, cookies=self.cookies, callback=self.detail_parse, dont_filter=True)
-
-    # def parse(self, response):
-    #     print(response.url)
-    #     yield scrapy.Request(url=response.url, headers=self.headers, cookies=self.cookies, callback=self.detail_parse, dont_filter=True)
 
     def __del__(self):
         self.driver.close()
@@ -138,9 +111,6 @@ class AfrSpider(RedisSpider):
                 self.total_urls += 1
                 total += 1
                 logger.info(f'total_urls:{self.total_urls} this time find total: {total} and process:{url}')
-                # if self.total_urls > 2:
-                #     logger.info('total_urls return.')
-                #     return
                 if not orm.check_if_exceed_num(self.name):
                     yield scrapy.Request(url=url, callback=self.detail_parse, dont_filter=True)
                 else:
@@ -150,12 +120,8 @@ class AfrSpider(RedisSpider):
 
     def detail_parse(self, response):
 
-        current_count = orm.count_urls_today(self.name)
-
-        if current_count >= NEWS_ACCOUNTS[self.name]["count_everyday"]:
-            self.log(f"afr we had {current_count} >= {NEWS_ACCOUNTS[self.name]["count_everyday"]} and exceed the count limit and do nothing.")
+        if orm.check_if_exceed_num(self.name):
             return
-
 
         self.loop_login()
 
@@ -404,18 +370,7 @@ class AfrSpider(RedisSpider):
                 login_submit.click()
 
                 time.sleep(5)
-                self.driver.save_screenshot('t1.png')
-
-
-                # # //*[@id="nav"]/header/div[1]/div/div[2]/ul/li/button/span
-                # # //*[@id="nav"]/header/div[1]/div/div[2]/ul/li/button
-                # # check login successful
-                # check_name = WebDriverWait(self.driver, 10).until(
-                #    EC.presence_of_element_located(By.XPATH, '//*[@id="nav"]/header//button["aria-label":"User menu"]/span')
-                # )
-                #
-                # logger.info(f'check_name:{check_name}')
-                # logger.info(f'check_name text:{check_name.text}')
+                # self.driver.save_screenshot('t1.png')
 
             except Exception as e:
                 logger.error(f'retry:{retry} and login error:{e}')
@@ -428,41 +383,11 @@ class AfrSpider(RedisSpider):
                     logger.info(f"retry:{retry} and successful so break.")
                     break
 
-        # WebDriverWait(driver, timeout=3).until(
-        #     EC.presence_of_element_located((By.ID, "rso"))
-        # )
-
-
-        # self.driver.get("https://www.afr.com/world/middle-east/trump-may-be-wrong-about-many-things-but-he-s-right-about-hamas-20250212-p5lbgn")
-        # time.sleep(3)
-        # self.driver.save_screenshot('t3.png')
-        # page_text = self.driver.page_source
-        # logger.info(f'page_text:{page_text}')
 
         if not self.is_login:
             logger.error(f'login failed')
             return
 
-        # get cookies
-        # cookies = self.driver.get_cookies()
-        # if cookies is not None and len(cookies) > 0:
-        #     logger.info("set first_request is False.")
-        # self.cookies_dict = {}
-        # for cookie in cookies:
-        #     self.cookies_dict[cookie['name']] = cookie['value']
-        # self.cookies_dict+= '{}={};'.format(cookie.get('name'), cookie.get('value'))
-
-
-        # pickle.dump(cookies, open("cookies.pkl", "wb"))
-        # logger.info(f'origin cookies:{cookies}')
-        # logger.info(f'save dict successful cookies:{self.cookies_dict}')
-
-        # username = None
-        # while (username == None):
-        #     username = WebDriverWait(driver, 10).until(
-        #         EC.presence_of_element_located((By.ID, "username"))
-        #     )
-        # username.send_keys('myusername@email.com')
         return
 
     def loop_login(self):

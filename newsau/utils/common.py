@@ -5,7 +5,7 @@ import hashlib
 
 from bs4 import BeautifulSoup
 
-from newsau.settings import NEWS_ACCOUNTS
+from newsau.cache.rsync_status import accounts_store
 import logging
 
 logger = logging.getLogger("common")
@@ -30,7 +30,7 @@ def get_image_url_full_path(name, url_object_id, url):
 
 # to replace the url in content
 def get_finished_image_url(name, url_object_id, url):
-    return f"{NEWS_ACCOUNTS[name]['image_cdn_domain']}{get_image_url_full_path(name, url_object_id, url)}"
+    return f"{accounts_store.get()[name]['image_cdn_domain']}{get_image_url_full_path(name, url_object_id, url)}"
 
 def afr_convert_to_datetime(date_str):
     """
