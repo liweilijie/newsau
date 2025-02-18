@@ -73,7 +73,7 @@ def afr_parse_detail(html):
 
     # first find the data-testid="beyondwords-player-wrapper" and the brother's <p>
     # body.xpath('//input[@data-test="username"]//following-sibling::*[name()="svg"][@data-prefix="fas"]')
-    post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p"]').extract()
+    post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p" or name()="figure"]').extract()
     if not post_content_before:
         logger.info(f'post_content_before is empty by beyondwords-player.')
         # //*[@id="content"]/div[2]
@@ -191,6 +191,75 @@ def afr_parse_detail(html):
     soup = BeautifulSoup(html, "html.parser")
     return soup
 
+from bs4 import BeautifulSoup
+
+import json
+
+
+def process_img_picture(soup):
+
+    # Process <img> tags
+    for img in soup.find_all("img"):
+        if img.has_attr("src"):
+            original_src = img["src"]
+            try:
+                img["src"] = common.get_finished_image_url("afr", "aaaa", original_src)
+                print(f'Updated <img> src: {original_src} -> {img["src"]}')
+            except Exception as e:
+                print(f'Error processing <img> src: {original_src} -> {e}')
+
+        if img.has_attr("srcset"):
+            original_srcset = img["srcset"]
+            try:
+                img["srcset"] = ", ".join(
+                    common.get_finished_image_url("afr", "aaaa", url.split()[0]) for url in original_srcset.split(",")
+                )
+                print(f'Updated <img> srcset: {original_srcset} -> {img["srcset"]}')
+            except Exception as e:
+                print(f'Error processing <img> srcset: {original_srcset} -> {e}')
+
+    # Process <source> tags inside <picture>
+    for source in soup.find_all("source"):
+        if source.has_attr("srcset"):
+            original_srcset = source["srcset"]
+            try:
+                source["srcset"] = ", ".join(
+                    f"{common.get_finished_image_url('afr', 'aaaa', url.strip().split()[0])} {url.strip().split()[1] if len(url.strip().split()) > 1 else ''}"
+                    for url in original_srcset.split(",")
+                )
+                print(f'Updated <source> srcset: {original_srcset} -> {source["srcset"]}')
+            except Exception as e:
+                print(f'Error processing <source> srcset: {original_srcset} -> {e}')
+
+    # Process data-pb-im-config attribute in <img> and <source> tags
+    for tag in soup.find_all(["img", "source"]):
+        if tag.has_attr("data-pb-im-config"):
+            try:
+                # Extract the JSON from the attribute
+                config_json = json.loads(tag["data-pb-im-config"])
+
+                # Check if the 'urls' field exists
+                if "urls" in config_json:
+                    # Replace URLs while preserving the scaling factor (e.g., 1x, 2x)
+                    updated_urls = []
+                    for url in config_json["urls"]:
+                        url_parts = url.strip().split()
+                        if len(url_parts) > 1:  # If the URL has a scaling factor (e.g., 2x)
+                            url_with_scaling = f"{common.get_finished_image_url('afr', 'aaaa', url_parts[0])} {url_parts[1]}"
+                            updated_urls.append(url_with_scaling)
+                        else:
+                            updated_urls.append(common.get_finished_image_url('afr', 'aaaa', url_parts[0]))
+
+                    config_json["urls"] = updated_urls
+
+                    # Reassign the updated JSON back to the attribute
+                    tag["data-pb-im-config"] = json.dumps(config_json)
+                    print(f'Updated data-pb-im-config for {tag}: {tag["data-pb-im-config"]}')
+            except Exception as e:
+                print(f'Error processing data-pb-im-config for {tag}: {e}')
+
+    return soup
+
 def url_join_t():
     home = "https://www.afr.com/"
     sub = "/world/central-america"
@@ -199,9 +268,13 @@ def url_join_t():
 
 
 if __name__ == "__main__":
-    content = pickle.load(open("../../p1.html", "rb"))
-    rt = afr_parse_detail(content)
-    logger.info(rt)
+    # content = pickle.load(open("../../p1.html", "rb"))
+    # rt = afr_parse_detail(content)
+    # logger.info(rt)
+
+    img = open("../../img.html", "rb")
+    soup = BeautifulSoup(img, "html.parser")
+    process_img_picture(soup)
     # url_join_t()
     # content = pickle.load(open("../../home.html", "rb"))
     # rt = afr_parse_home(content)

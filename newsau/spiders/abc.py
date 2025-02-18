@@ -52,7 +52,7 @@ class AbcSpider(RedisSpider):
                 else:
                     self.total_urls += 1
                     self.log(f"direct {schedule} parse_detail {response.url}")
-                    yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True)
+                    yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True, meta={"is_priority": True})
                     return
 
         post_nodes = response.xpath('//div[@data-component="PaginationList"]//ul/li')
@@ -80,6 +80,8 @@ class AbcSpider(RedisSpider):
                 self.total_urls += 1
                 yield scrapy.Request(url=parse.urljoin(response.url, post_url), meta={"post_first_image_url": post_first_image_url}, callback=self.parse_detail, dont_filter=True)
 
+        once_total = 0
+
 
         if len(post_nodes) <= 0:
             if self._check_detail_page_by_url(response.url) is not None:
@@ -97,13 +99,18 @@ class AbcSpider(RedisSpider):
     # scrapy shell to manual code the css selector
     def parse_detail(self, response):
 
-        if orm.check_if_exceed_num(self.name):
-            return
+        is_priority = response.meta.get('is_priority', False)
+
+
+        if not is_priority:
+            if orm.check_if_exceed_num(self.name):
+                return
 
         self.log(f"I just visited parse detail {response.url}")
 
         abc_item = AbcDataItem()
         abc_item["name"] = self.name
+        abc_item["priority"] = is_priority
 
         post_title = response.xpath('//*[@id="content"]/article//header//h1/text()').extract_first("").strip()
         if post_title == '':

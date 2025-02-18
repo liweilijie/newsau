@@ -28,6 +28,7 @@ class AbcDataItem(scrapy.Item):
     content = scrapy.Field()
     post_date = scrapy.Field()
     scrapy_date = scrapy.Field()
+    priority = scrapy.Field()
 
     def convert_to_wp_news(self):
         if self.get("title", "") == "" or self.get("content", "") == "":
@@ -108,6 +109,7 @@ class AfrDataItem(scrapy.Item):
     content = scrapy.Field()
     post_date = scrapy.Field()
     scrapy_date = scrapy.Field()
+    priority = scrapy.Field()
 
     def convert_to_wp_news(self):
         if self.get("title", "") == "" or self.get("content", "") == "":

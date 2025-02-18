@@ -30,6 +30,7 @@ def get_image_url_full_path(name, url_object_id, url):
 
 # to replace the url in content
 def get_finished_image_url(name, url_object_id, url):
+    print(f'get_finished_image_url:{url}')
     return f"{accounts_store.get()[name]['image_cdn_domain']}{get_image_url_full_path(name, url_object_id, url)}"
 
 def afr_convert_to_datetime(date_str):

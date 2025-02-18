@@ -24,6 +24,7 @@ def query_object_id(name: str, url_object_id: str) -> bool:
                 WPScrapyNews.name == name
             )
         ).first()
+        session.commit()
         if existing_url is None:
             return False
         else:
@@ -43,6 +44,7 @@ def count_urls_today(name: str):
                 func.DATE(WPScrapyNews.post_date) == func.current_date()
             )
         ).count()
+        session.commit()
 
         logger.info(f'today_count:{today_count}')
         if today_count is not None:
@@ -68,6 +70,7 @@ def get_category(name, topic):
                 WPScrapyCategory.scrapy_category.like(search)
             )
         ).first()
+        session.commit()
 
         logger.info(f'category:{category}')
         if category is not None:

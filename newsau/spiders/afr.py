@@ -1,3 +1,4 @@
+import json
 import pickle
 import time
 
@@ -70,9 +71,16 @@ class AfrSpider(RedisSpider):
 
     def parse(self, response):
 
-        if orm.check_if_exceed_num(self.name):
-            logger.info('exceed and return.')
-            return
+        is_priority = False
+        if response.request.meta is not None:
+            schedule = response.request.meta.get("schedule")
+            if schedule is not None and schedule == "priority_url":
+                is_priority = True
+
+        if not is_priority:
+            if orm.check_if_exceed_num(self.name):
+                logger.info('exceed and return.')
+                return
 
         self.loop_login()
 
@@ -81,6 +89,13 @@ class AfrSpider(RedisSpider):
             return
 
         logger.info(f'we start get {response.url}')
+
+        if is_priority:
+            self.total_urls += 1
+            self.log(f"direct {schedule} parse_detail {response.url}")
+            if afrparse.contains_date(response.url):
+                yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True, meta={"is_priority": is_priority})
+                return
 
         # if not response.url.rstrip('/').endswith(self.home_url):
         if afrparse.contains_date(response.url):
@@ -120,8 +135,11 @@ class AfrSpider(RedisSpider):
 
     def detail_parse(self, response):
 
-        if orm.check_if_exceed_num(self.name):
-            return
+        is_priority = response.meta.get('is_priority', False)
+
+        if not is_priority:
+            if orm.check_if_exceed_num(self.name):
+                return
 
         self.loop_login()
 
@@ -150,13 +168,13 @@ class AfrSpider(RedisSpider):
         self.driver.execute_script(self.js)
 
         page_text = self.driver.page_source
-        logger.debug(f'page_text:{page_text}')
+        # logger.debug(f'page_text:{page_text}')
 
         body = Selector(text=page_text)
         # content = Selector(text=page_text).xpath('//div[@id="endOfArticle"]').extract_first('').strip()
         # print(content)
 
-        # pickle.dump(page_text, open("p1.html", "wb"))
+        pickle.dump(page_text, open("p1.html", "wb"))
 
         # //*[@id="content"]/header/h1
         # //*[@id="content"]/header/div[1]/h1
@@ -194,7 +212,8 @@ class AfrSpider(RedisSpider):
             # //*[@id="content"]/div[1]/section/section/div/span/span
             post_author = body.xpath('//*[@id="content"]/div[1]/section/section/div/span[@data-testid="AuthorNames"]/span')
 
-        post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p"]').extract()
+        post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p" or name()="figure"]').extract()
+        # post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p"]').extract()
         if not post_content_before:
             logger.info(f'post_content_before is empty by beyondwords-player.')
             # //*[@id="content"]/div[2]
@@ -229,6 +248,7 @@ class AfrSpider(RedisSpider):
 
         afr_item = AfrDataItem()
         afr_item["name"] = self.name
+        afr_item["priority"] = is_priority
 
         afr_item["origin_title"] = post_title
         afr_item["topic"] = 'financial'
@@ -257,35 +277,125 @@ class AfrSpider(RedisSpider):
             logger.warning(f'post_content is empty and return nothing to do {response.url}.')
             return
 
+        # pickle.dump(post_content, open("cb.html", "wb"))
+
         # process the content
         # find all the images src in the post_content
         # and store these images src
         # and replace the domain of the src in post_content
         soup = BeautifulSoup(post_content,"html.parser")
 
-        # delete source element TODO: need optimization
-        for picture in soup.find_all('picture'):
-            for source in picture.find_all('source'):
-                source.decompose()
+        # soup = afrparse.process_img_picture(soup)
+        # Process <img> tags
+        for img in soup.find_all("img"):
+            if img.has_attr("src"):
+                original_src = img["src"]
+                try:
+                    if original_src.startswith("http") or original_src.startswith("https"):
+                        afr_item["front_image_url"].append(original_src)
+                        img["src"] = common.get_finished_image_url(self.name, afr_item["url_object_id"], original_src)
+                        print(f'Updated <img> src: {original_src} -> {img["src"]}')
+                    else:
+                        print(f'Skipping <img> src (no change): {original_src}')
+                except Exception as e:
+                    print(f'Error processing <img> src: {original_src} -> {e}')
 
-        for img in soup.find_all('img'):
-            if img['src'].startswith("https") or img['src'].startswith("http"):
-                afr_item["front_image_url"].append(img['src'])  # append origin url to download
-                img['src'] = common.get_finished_image_url('afr', afr_item["url_object_id"],
-                                                           img['src'])  # replace our website image url from cdn
-                if "srcset" in img.attrs:
-                    del img.attrs["srcset"]
-                if "data-pb-im-config" in img.attrs:
-                    del img.attrs["data-pb-im-config"]
-            else:
-                img.decompose()
+            if img.has_attr("srcset"):
+                original_srcset = img["srcset"]
+                try:
+                    updated_srcset = []
+                    for url in original_srcset.split(","):
+                        url_parts = url.split()[0]
+                        if url_parts.startswith("http") or url_parts.startswith("https"):
+                            afr_item["front_image_url"].append(url_parts)  # save origin image url
+                            updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
+                                " " + url.split()[1] if len(url.split()) > 1 else ""))
+                        else:
+                            updated_srcset.append(url)  # stay origin url not process if not http or https prefix
+                    img["srcset"] = ", ".join(updated_srcset)
+                    print(f'Updated <img> srcset: {original_srcset} -> {img["srcset"]}')
+                except Exception as e:
+                    print(f'Error processing <img> srcset: {original_srcset} -> {e}')
+
+        # Process <source> tags inside <picture>
+        for source in soup.find_all("source"):
+            if source.has_attr("srcset"):
+                original_srcset = source["srcset"]
+                try:
+                    # save srcset URL
+                    updated_srcset = []
+                    for url in original_srcset.split(","):
+                        url_parts = url.split()[0]
+                        if url_parts.startswith("http") or url_parts.startswith("https"):
+                            afr_item["front_image_url"].append(url_parts)  # stay origin url
+                            updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
+                                " " + url.split()[1] if len(url.split()) > 1 else ""))
+                        else:
+                            updated_srcset.append(url)  # stay origin url not process if not http or https prefix
+                    source["srcset"] = ", ".join(updated_srcset)
+                    print(f'Updated <source> srcset: {original_srcset} -> {source["srcset"]}')
+                except Exception as e:
+                    print(f'Error processing <source> srcset: {original_srcset} -> {e}')
+
+        # Process data-pb-im-config attribute in <img> and <source> tags
+        for tag in soup.find_all(["img", "source"]):
+            if tag.has_attr("data-pb-im-config"):
+                try:
+                    # Extract the JSON from the attribute
+                    config_json = json.loads(tag["data-pb-im-config"])
+
+                    # Check if the 'urls' field exists
+                    if "urls" in config_json:
+                        # Replace URLs while preserving the scaling factor (e.g., 1x, 2x)
+                        updated_urls = []
+                        for url in config_json["urls"]:
+                            url_parts = url.strip().split()
+                            if len(url_parts) > 1:  # If the URL has a scaling factor (e.g., 2x)
+                                if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
+                                    afr_item["front_image_url"].append(url_parts[0])  # save origin url
+                                    url_with_scaling = f"{common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0])} {url_parts[1]}"
+                                    updated_urls.append(url_with_scaling)
+                                else:
+                                    updated_urls.append(url)  # do nothing
+                            else:
+                                if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
+                                    afr_item["front_image_url"].append(url_parts[0])  # save origin url to download
+                                    updated_urls.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0]))
+                                else:
+                                    updated_urls.append(url)  # do nothing
+
+                        config_json["urls"] = updated_urls
+
+                        # Reassign the updated JSON back to the attribute
+                        tag["data-pb-im-config"] = json.dumps(config_json)
+                        print(f'Updated data-pb-im-config for {tag}: {tag["data-pb-im-config"]}')
+                except Exception as e:
+                    print(f'Error processing data-pb-im-config for {tag}: {e}')
+
+        #end
+
+        # # delete source element TODO: need optimization
+        # for picture in soup.find_all('picture'):
+        #     for source in picture.find_all('source'):
+        #         source.decompose()
+        #
         # for img in soup.find_all('img'):
-        #     afr_item["front_image_url"].append(img['src']) # append origin url to download
-        #     img['src'] = common.get_finished_image_url(self.name, afr_item["url_object_id"], img['src']) # replace our website image url from cdn
-        #     if "srcset" in img.attrs:
-        #         del img.attrs["srcset"]
-        #     if "data-pb-im-config" in img.attrs:
-        #         del img.attrs["data-pb-im-config"]
+        #     if img['src'].startswith("https") or img['src'].startswith("http"):
+        #         afr_item["front_image_url"].append(img['src'])  # append origin url to download
+        #         img['src'] = common.get_finished_image_url('afr', afr_item["url_object_id"], img['src'])  # replace our website image url from cdn
+        #         if "srcset" in img.attrs:
+        #             del img.attrs["srcset"]
+        #         if "data-pb-im-config" in img.attrs:
+        #             del img.attrs["data-pb-im-config"]
+        #     else:
+        #         img.decompose()
+        # # for img in soup.find_all('img'):
+        # #     afr_item["front_image_url"].append(img['src']) # append origin url to download
+        # #     img['src'] = common.get_finished_image_url(self.name, afr_item["url_object_id"], img['src']) # replace our website image url from cdn
+        # #     if "srcset" in img.attrs:
+        # #         del img.attrs["srcset"]
+        # #     if "data-pb-im-config" in img.attrs:
+        # #         del img.attrs["data-pb-im-config"]
 
 
         # find all a label
@@ -327,10 +437,12 @@ class AfrSpider(RedisSpider):
         post_content = str(soup)
         afr_item["origin_content"] = post_content
 
-        logger.info(f'afr_item:{afr_item}')
+        # pickle.dump(post_content, open("ca.html", "wb"))
+
+        # logger.info(f'afr_item:{afr_item}')
 
         if afr_item["url"] != "" and afr_item["origin_title"] != "" and afr_item["origin_content"] != "":
-            logger.info(f'afr_item:{afr_item}')
+            # logger.info(f'afr_item:{afr_item}')
             yield afr_item
         else:
             print("nothing to do due to invalid item: ", afr_item)

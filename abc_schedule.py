@@ -4,26 +4,30 @@ import schedule
 import time
 import redis
 import logging
+import os
+from dotenv import load_dotenv
 
-logger = logging.getLogger("schedule")
+
+logger = logging.getLogger("abc_schedule")
 
 class AbcSchedule(object):
 
-    def __init__(self):
-        # init redis client
-        # logger.info("redis host:%s", host)
-        # self.host = host
-        self.r = redis.Redis(host='localhost', port=6379, db=2, decode_responses=True)
+    def __init__(self, host="127.0.0.1", port=6379, db=2, password=None):
+        self.spider_key = "abcspider:start_urls"
+        try:
+            self.r = redis.Redis(host=host, port=port, db=db, password=password, decode_responses=True)
 
-    def priority_url(self, url):
-        # lpush abcspider:start_urls '{ "url": "https://www.abc.net.au/news/2025-02-10/trump-to-announce-new-tariffs-on-steel-and-aluminium/104917334", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule":"priority_url"}}'
-        self.r.lpush('abcspider:start_urls', '{ "url": "{url}", "meta": {"schedule":"priority_url"}}')
+            if self.r.ping():
+                logger.info("Redis connect successful.")
+            else:
+                logger.error("Redis connect failed！")
+        except redis.ConnectionError as e:
+            logger.error(f"Redis happened error: {e}")
+            raise e
 
     def justin_job(self):
-        # lpush abcspider:start_urls '{ "url": "https://www.abc.net.au/news/justin", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule_num":2} }'
+        self.r.lpush(self.spider_key, '{"url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":2}}')
         logger.info("justin lpush https://www.abc.net.au/news/justin")
-        self.r.lpush('abcspider:start_urls', '{ "url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":1}}')
-        # self.r.lpush('abcspider:start_urls', '{ "url": "https://www.abc.net.au/news/justin"}')
 
 def main():
     # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
@@ -34,7 +38,16 @@ def main():
                         format='%(asctime)s:%(name)s:%(levelname)s:%(lineno)d:%(module)s:%(message)s')
     logger.info("new redis 2 start job")
 
-    abc_schedule = AbcSchedule()
+    load_dotenv()
+
+    REDIS_HOST = os.getenv("REDIS_HOST")
+    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB = int(os.getenv("REDIS_DB", "2"))
+
+    logger.info(f"REDIS_HOST: {REDIS_HOST}, REDIS_PASSWORD: {REDIS_PASSWORD}, REDIS_PORT: {REDIS_PORT}, REDIS_DB: {REDIS_DB}")
+
+    abc_schedule = AbcSchedule(REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD)
     abc_schedule.justin_job()
 
     schedule.every().day.at("07:00", "Australia/Sydney").do(abc_schedule.justin_job)

@@ -45,8 +45,9 @@ class AbcContentTranslatePipeline(object):
 
     def process_item(self, item, spider):
 
-        if orm.check_if_exceed_num(item["name"]):
-            return item
+        if not item["priority"]:
+            if orm.check_if_exceed_num(item["name"]):
+                return item
 
         # # for test emacsvi.com
         # item["title"] = item["origin_title"]
@@ -120,8 +121,9 @@ class SaveToMySqlPipeline(object):
 
     def process_item(self, item, spider):
 
-        if orm.check_if_exceed_num(item["name"]):
-            return item
+        if not item["priority"]:
+            if orm.check_if_exceed_num(item["name"]):
+                return item
 
         obj = item.convert_to_wp_news()
         if obj is not None:

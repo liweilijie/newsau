@@ -2,11 +2,11 @@ import time
 import redis
 import json
 
-from newsau.settings import REDIS_HOST, REDIS_PORT, REDIS_DB, NEWS_ACCOUNTS
+from newsau.settings import REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_DB, NEWS_ACCOUNTS
 
 class RedisObjectStore:
-    def __init__(self, key, host='localhost', port=6379, db=2):
-        self.redis = redis.StrictRedis(host=host, port=port, db=db, decode_responses=True)
+    def __init__(self, key, host='localhost', password=None, port=6379, db=2):
+        self.redis = redis.Redis(host=host, password=password, port=port, db=db, decode_responses=True)
         self.key = key
 
     def set(self, obj, timeout=None):
@@ -31,7 +31,7 @@ class RedisObjectStore:
         """Delete the object from Redis"""
         self.redis.delete(self.key)
 
-accounts_store = RedisObjectStore("accounts:setting", REDIS_HOST, REDIS_PORT, REDIS_DB)
+accounts_store = RedisObjectStore("accounts:setting", REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_DB)
 accounts_store.set(NEWS_ACCOUNTS)
 print(accounts_store.get())
 
