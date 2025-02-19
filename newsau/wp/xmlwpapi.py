@@ -43,7 +43,7 @@ class WpApi():
         print(f'convert {post_date} to datetime error: {e}')
         post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
 
-    print(f'post utc date:{post.date}')
+    # print(f'post utc date:{post.date}')
 
     # post.terms_names = {
     #   'post_tag': ['test', 'firstpost'],

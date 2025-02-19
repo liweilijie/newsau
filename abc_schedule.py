@@ -12,10 +12,10 @@ logger = logging.getLogger("abc_schedule")
 
 class AbcSchedule(object):
 
-    def __init__(self, host="127.0.0.1", port=6379, db=2, password=None):
-        self.spider_key = "abcspider:start_urls"
+    def __init__(self, name, redis_url):
+        self.spider_key = f"{name}spider:start_urls"
         try:
-            self.r = redis.Redis(host=host, port=port, db=db, password=password, decode_responses=True)
+            self.r = redis.Redis.from_url(redis_url, decode_responses=True)
 
             if self.r.ping():
                 logger.info("Redis connect successful.")
@@ -27,7 +27,7 @@ class AbcSchedule(object):
 
     def justin_job(self):
         self.r.lpush(self.spider_key, '{"url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":2}}')
-        logger.info("justin lpush https://www.abc.net.au/news/justin")
+        logger.info(f'lpush {self.spider_key} {{"url": "https://www.abc.net.au/news/justin", "meta": {{"schedule_num":2}}}}')
 
 def main():
     # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
@@ -40,14 +40,12 @@ def main():
 
     load_dotenv()
 
-    REDIS_HOST = os.getenv("REDIS_HOST")
-    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_DB = int(os.getenv("REDIS_DB", "2"))
+    redis_url = os.getenv("REDIS_URL")
 
-    logger.info(f"REDIS_HOST: {REDIS_HOST}, REDIS_PASSWORD: {REDIS_PASSWORD}, REDIS_PORT: {REDIS_PORT}, REDIS_DB: {REDIS_DB}")
+    logger.info(f"redis_url:{redis_url}")
 
-    abc_schedule = AbcSchedule(REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD)
+    abc_schedule = AbcSchedule("abc", redis_url)
+
     abc_schedule.justin_job()
 
     schedule.every().day.at("07:00", "Australia/Sydney").do(abc_schedule.justin_job)

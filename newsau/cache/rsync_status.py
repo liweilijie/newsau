@@ -27,13 +27,23 @@ class RedisObjectStore:
             return True
         return False
 
+    def update_count_everyday(self, name, num):
+        """Update specific fields of the object"""
+        data = self.get()
+        if data:
+            data[name]["count_everyday"] += num
+            self.set(data)
+            return True
+        return False
+
+
     def delete(self):
         """Delete the object from Redis"""
         self.redis.delete(self.key)
 
-accounts_store = RedisObjectStore("accounts:setting", REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_DB)
-accounts_store.set(NEWS_ACCOUNTS)
-print(accounts_store.get())
+# accounts_store = RedisObjectStore("accounts:setting", REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_DB)
+# accounts_store.set(NEWS_ACCOUNTS)
+# print(accounts_store.get())
 
 
 class RedisSyncStatus:
@@ -55,6 +65,7 @@ class RedisSyncStatus:
 
 # Example usage
 if __name__ == "__main__":
+    pass
 
     # sync_status = RedisSyncStatus("sync_flag")
     # sync_status.set(timeout=2)
@@ -69,5 +80,9 @@ if __name__ == "__main__":
     # obj_store.update({"age": 26})  # Update the object
     # print(obj_store.get())  # View the updated object
     # obj_store.delete()  # Delete the object
-    print(accounts_store.get()["afr"]["image_cdn_domain"])
+
+    # print(accounts_store.get()["afr"]["image_cdn_domain"])
+    # print(accounts_store.get()["afr"]["count_everyday"])
+    # accounts_store.update_count_everyday("afr", 5)
+    # print(accounts_store.get()["afr"]["count_everyday"])
 

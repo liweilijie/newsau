@@ -9,12 +9,12 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger("afr_schedule")
 
-class AfcSchedule(object):
+class AfrSchedule(object):
 
-    def __init__(self, host="127.0.0.1", port=6379, db=2, password=None):
-        self.spider_key = "afrspider:start_urls"
+    def __init__(self, name, redis_url):
+        self.spider_key = f"{name}spider:start_urls"
         try:
-            self.r = redis.Redis(host=host, port=port, db=db, password=password, decode_responses=True)
+            self.r = redis.Redis.from_url(redis_url, decode_responses=True)
 
             if self.r.ping():
                 logger.info("Redis connect successful.")
@@ -25,12 +25,10 @@ class AfcSchedule(object):
             raise e
 
     def afr_job(self):
-        self.r.lpush(self.spider_key, '{ "url": "https://www.afr.com", "meta": {"schedule_num":1}}')
-        logger.info(f'lpush {self.spider_key} https://www.afr.com')
+        self.r.lpush(self.spider_key, '{"url": "https://www.afr.com", "meta": {"schedule_num":2}}')
+        logger.info(f'lpush {self.spider_key} {{"url": "https://www.afr.com", "meta": {{"schedule_num":2}}}}')
 
 def main():
-    # logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
-    # logging.basicConfig(level=logging.DEBUG)
 
     logging.basicConfig(level=logging.DEBUG,
                         datefmt='%Y-%m-%d %H:%M:%S',
@@ -38,17 +36,28 @@ def main():
 
     load_dotenv()
 
-    REDIS_HOST = os.getenv("REDIS_HOST")
-    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_DB = int(os.getenv("REDIS_DB", "2"))
+    redis_url = os.getenv("REDIS_URL")
 
-    logger.info(f"REDIS_HOST: {REDIS_HOST}, REDIS_PASSWORD: {REDIS_PASSWORD}, REDIS_PORT: {REDIS_PORT}, REDIS_DB: {REDIS_DB}")
+    logger.info(f"redis_url:{redis_url}")
 
-    afc_schedule = AfcSchedule(REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD)
-    afc_schedule.afr_job()
+    afr_schedule = AfrSchedule("afr", redis_url)
+    afr_schedule.afr_job()
 
-    schedule.every().hour.do(afc_schedule.afr_job)
+    schedule.every().day.at("07:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("08:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("09:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("10:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("11:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("12:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("13:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("14:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("15:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("16:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("17:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("18:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("19:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("20:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    schedule.every().day.at("21:00", "Australia/Sydney").do(afr_schedule.afr_job)
 
     # schedule.every(10).minutes.do(job)
     # schedule.every().hour.do(job)

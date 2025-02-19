@@ -4,11 +4,46 @@ import pytz
 import hashlib
 
 from bs4 import BeautifulSoup
+from newsau.settings import NEWS_ACCOUNTS
 
-from newsau.cache.rsync_status import accounts_store
 import logging
 
 logger = logging.getLogger("common")
+
+import re
+
+def is_valid_date(date_str, date_format):
+    """
+    Check if a given date string matches a valid date format.
+
+    :param date_str: The date string to validate.
+    :param date_format: The expected date format (e.g., '%Y-%m-%d' or '%Y%m%d').
+    :return: True if it's a valid date, False otherwise.
+    """
+    try:
+        datetime.strptime(date_str, date_format)  # Attempt to parse date
+        return True
+    except ValueError:
+        return False  # Invalid date
+
+def contains_valid_date(url):
+    """
+    Check if a URL contains a valid date in YYYY-MM-DD or YYYYMMDD format.
+
+    :param url: The URL string to check.
+    :return: True if a valid date is found, otherwise False.
+    """
+    # Match YYYY-MM-DD format
+    match1 = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", url)
+    if match1 and is_valid_date(match1.group(1), "%Y-%m-%d"):
+        return True  # Valid YYYY-MM-DD date found
+
+    # Match YYYYMMDD format
+    match2 = re.search(r"\b(\d{8})\b", url)
+    if match2 and is_valid_date(match2.group(1), "%Y%m%d"):
+        return True  # Valid YYYYMMDD date found
+
+    return False  # No valid date found
 
 def get_md5(url):
     if isinstance(url, str):
@@ -31,7 +66,7 @@ def get_image_url_full_path(name, url_object_id, url):
 # to replace the url in content
 def get_finished_image_url(name, url_object_id, url):
     print(f'get_finished_image_url:{url}')
-    return f"{accounts_store.get()[name]['image_cdn_domain']}{get_image_url_full_path(name, url_object_id, url)}"
+    return f"{NEWS_ACCOUNTS[name]['image_cdn_domain']}{get_image_url_full_path(name, url_object_id, url)}"
 
 def afr_convert_to_datetime(date_str):
     """
@@ -145,7 +180,24 @@ if __name__ == "__main__":
     # content = (trip_ai_mistake(content))
     # print(content)
 
-    date_str = "Feb 13, 2025 – 6.25pm"
-    print(afr_convert_to_datetime(date_str))
+    # date_str = "Feb 13, 2025 – 6.25pm"
+    # print(afr_convert_to_datetime(date_str))
+
+    # 🔹 Test Cases
+    test_urls = [
+        "https://example.com/news/2025-02-19/article",  # ✅ YYYY-MM-DD
+        "https://example.com/archive/20250219/report",  # ✅ YYYYMMDD
+        "https://example.com/blog/post-123",  # ❌ No date
+        "https://example.com/2025-02-30",  # ❌ Invalid date (Feb 30 does not exist)
+        "https://example.com/20251319",  # ❌ Invalid date (Month 13 is invalid)
+        "https://example.com/data?date=2024-04-31",  # ❌ Invalid date (April 31 does not exist)
+        "https://example.com/data?date=20240430"  # ✅ YYYYMMDD (Valid April 30)
+    ]
+
+    for url in test_urls:
+        print(f"{url} → {contains_valid_date(url)}")
+
+    url = "https://www.afr.com/companies/financial-services/nab-first-quarter-profit-drops-on-small-margin-decline-20250218-p5ld4y"
+    print(contains_valid_date(url))
 
     # parse_content()

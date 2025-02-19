@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 
+import scrapy
 from twisted.enterprise import adbapi
 import MySQLdb
 from scrapy.exporters import JsonItemExporter
@@ -22,9 +23,13 @@ import os
 from newsau.ai import openaiplat
 from newsau.ai import deepseek
 from newsau.wp.xmlwpapi import WpApi
+from newsau.cache import url_queue, rcount
+from newsau.settings import REDIS_URL
 
 logger = logging.getLogger(__name__)
-# logger.setLevel('DEBUG')
+
+# for sequential request every url
+# from twisted.internet import defer
 
 SETTING = get_project_settings()
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=SETTING["GOOGLE_APPLICATION_CREDENTIALS"]
@@ -43,11 +48,12 @@ class AbcContentTranslatePipeline(object):
         self.op = openaiplat.OpenAiPlat()
 
 
+    # @defer.inlineCallbacks
     def process_item(self, item, spider):
 
-        if not item["priority"]:
-            if orm.check_if_exceed_num(item["name"]):
-                return item
+        # if not item["priority"]:
+        #     if orm.check_if_exceed_num(item["name"]):
+        #         return item
 
         # # for test emacsvi.com
         # item["title"] = item["origin_title"]
@@ -103,10 +109,10 @@ class AbcImagePipeline(ImagesPipeline):
         if "front_image_path" not in item:
             item["front_image_path"] = []
 
-        logger.debug(f'abc Image item:{item}')
+        # logger.debug(f'abc Image item:{item}')
         if "front_image_url" in item:
             for ok, value in results:
-                logger.debug(f'ok:{ok}, value:{value}')
+                # logger.debug(f'ok:{ok}, value:{value}')
                 if isinstance(value, dict) and 'path' in value:
                     item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]['image_cdn_domain']}{value["path"]}')
 
@@ -116,20 +122,36 @@ class AbcImagePipeline(ImagesPipeline):
 class SaveToMySqlPipeline(object):
 
     def __init__(self):
+        self.queue = None
+        self.count = None
         self.wp = WpApi(SETTING['WP_XMLURL'], SETTING['WP_USER'], SETTING['WP_PASSWORD'])
 
+    def open_spider(self, spider):
+        """Initialize the queue when the spider starts."""
+        if self.queue is None:
+            self.queue = url_queue.RedisUrlQueue(spider.name, REDIS_URL)
+        if self.count is None:
+            self.count = rcount.RedisCounter(spider.name, REDIS_URL)
 
+    # @defer.inlineCallbacks
     def process_item(self, item, spider):
-
         if not item["priority"]:
-            if orm.check_if_exceed_num(item["name"]):
+            if orm.check_if_exceed_num(spider.name, self.count.get_value()):
                 return item
 
         obj = item.convert_to_wp_news()
         if obj is not None:
             if orm.create_post(obj):
                 self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
+                if item["priority"]:
+                    self.count.increment(1)
 
+        task = self.queue.pop()
+        if task:
+            next_url = task.get("url")
+            if next_url:
+                logger.info(f'finished save mysql and process next_url:{next_url}')
+                spider.crawler.engine.crawl(scrapy.Request(next_url, callback=spider.detail_parse))
         return item
 
 

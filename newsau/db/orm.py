@@ -6,8 +6,6 @@ from newsau.db.models import WPScrapyNews, WPScrapyCategory
 from sqlalchemy import and_
 from sqlalchemy import func
 
-from newsau.cache.rsync_status import accounts_store
-
 logger = logging.getLogger("mysql")
 
 def query_object_id(name: str, url_object_id: str) -> bool:
@@ -85,12 +83,12 @@ def get_category(name, topic):
 
 
 # check if exceed
-def check_if_exceed_num(name):
+def check_if_exceed_num(name, max_value):
     current_count = count_urls_today(name)
 
-    if current_count >= accounts_store.get()[name]["count_everyday"]:
+    if current_count >= max_value:
         logger.info(
-            f"afr we had {current_count} >= {accounts_store.get()[name]["count_everyday"]} and exceed the count limit and do nothing.")
+            f"afr we had {current_count} >= {max_value} and exceed the count limit and do nothing.")
         return True
     return False
 
@@ -101,7 +99,7 @@ def create_post(post: WPScrapyNews) -> bool:
     try:
         session.add(post)
         session.commit()
-        logger.info(f'create post successful:{post}')
+        # logger.info(f'create post successful:{post}')
         return True
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError error when create post:{post}: {e}")

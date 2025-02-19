@@ -272,10 +272,17 @@ if __name__ == "__main__":
     # rt = afr_parse_detail(content)
     # logger.info(rt)
 
-    img = open("../../img.html", "rb")
-    soup = BeautifulSoup(img, "html.parser")
-    process_img_picture(soup)
+    # img = open("../../img.html", "rb")
+    # soup = BeautifulSoup(img, "html.parser")
+    # process_img_picture(soup)
+
     # url_join_t()
     # content = pickle.load(open("../../home.html", "rb"))
     # rt = afr_parse_home(content)
     # logger.info(rt)
+
+    url = "https://www.abc.net.au/news/2025-02-19/meta-announces-subsea-cables-project/104949500"
+    if contains_date(url):
+        print('ok')
+    else:
+        print('failed')

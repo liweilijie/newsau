@@ -1,15 +1,21 @@
 from urllib import parse
 import re
+import logging
 
 import scrapy
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 from newsau.items import AbcDataItem
 from newsau.utils import common
 from scrapy_redis.spiders import RedisSpider
 from newsau.db import orm
+from newsau.cache import url_queue
+from newsau.cache import rcount
+from newsau.settings import REDIS_URL
+from newsau.settings import NEWS_ACCOUNTS
 
-
+logger = logging.getLogger('abc')
 
 class AbcSpider(RedisSpider):
 
@@ -33,77 +39,91 @@ class AbcSpider(RedisSpider):
         # Be careful primary domain maybe contain other domain to store the image src, so you must remember allowed the domains.
         domain = kwargs.pop("abc.net.au", "live-production.wcms.abc-cdn.net.au")
         self.allowed_domains = filter(None, domain.split(","))
+
+        self.domain = "https://www.abc.net.au/"
+
+        self.queue = url_queue.RedisUrlQueue(self.name, REDIS_URL)
+        self.count = rcount.RedisCounter(self.name, REDIS_URL)
+        if self.count.get_value() is None or self.count.get_value() <= 0:
+            self.count.set_value(NEWS_ACCOUNTS[self.name]["count_everyday"])
+        logger.info(f'current count_everyday is:{self.count.get_value()}')
+
         super().__init__(*args, **kwargs)
 
     def parse(self, response):
-        self.log(f"I just visited and parse {response.url}")
 
-        # process like this url: '{ "url": "url", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule":"priority_url"}}'
-        # get meta.schedule and meta.func in request
+        is_priority = False
+        schedule_num = None
+
         if response.request.meta is not None:
             schedule = response.request.meta.get("schedule")
-            func = response.request.meta.get("func")
             if schedule is not None and schedule == "priority_url":
-                if func is not None and func != "":
-                    self.total_urls += 1
-                    self.log(f"direct {schedule} {func} {response.url}")
-                    yield scrapy.Request(url=response.url, callback=func, dont_filter=True)
-                    return
-                else:
-                    self.total_urls += 1
-                    self.log(f"direct {schedule} parse_detail {response.url}")
-                    yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True, meta={"is_priority": True})
-                    return
+                is_priority = True
+
+        if response.request.meta is not None:
+            schedule_num = response.request.meta.get("schedule_num")
+            if schedule_num is not None and schedule_num > 0:
+                logger.info(f'before count_everyday:{self.count.get_value()}')
+                self.count.increment(schedule_num)
+                logger.info(f'result current count_everyday:{self.count.get_value()}')
+
+        if not is_priority:
+            if orm.check_if_exceed_num(self.name, self.count.get_value()):
+                logger.info('exceed and return.')
+                return
+
+        if common.contains_valid_date(response.url):
+            yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True, meta={"is_priority": True})
+            return
 
         post_nodes = response.xpath('//div[@data-component="PaginationList"]//ul/li')
 
-        # process like this url: '{ "url": "url", "meta": {"job-id":"123xsd", "start-date":"dd/mm/yy", "schedule_num":2}}'
-        schedule_num = None
-        once_total = 0
-        if response.request.meta is not None:
-            schedule_num = response.request.meta.get("schedule_num")
-            self.log(f"meta {response.request.meta}")
-
         # for post_node in post_nodes[:11]:
         for post_node in post_nodes:
-            post_url = post_node.css('h3 a::attr(href)').extract_first("")
-            post_title = post_node.css('h3 a::text').extract_first("")
-            post_topic = post_node.css('div a[data-component="SubjectTag"] p::text').extract_first("")
-            post_first_image_url = post_node.css('div[data-component="Thumbnail"] img::attr(src)').extract_first("").strip()
+            post_url = post_node.css('h3 a::attr(href)').extract_first("").strip()
+            # post_title = post_node.css('h3 a::text').extract_first("")
+            # post_topic = post_node.css('div a[data-component="SubjectTag"] p::text').extract_first("")
+            # post_first_image_url = post_node.css('div[data-component="Thumbnail"] img::attr(src)').extract_first("").strip()
 
-            if post_url != "":
-                if schedule_num is not None and once_total >= schedule_num:
-                    self.log(f"schedule {once_total} >= {schedule_num} and nothing to do.")
-                    break
+            if post_url:
+                url = urljoin(self.domain, post_url)
+                logger.info(f'url:{url}, post_url:{post_url}')
+                if common.contains_valid_date(url):
+                    if not orm.query_object_id(self.name, url):
+                        logger.info(f'a:{url} and push to queue')
+                        self.queue.push(url)
+                    else:
+                        logger.info(f'do nothing because already in db:{url}')
 
-                once_total += 1
-                self.total_urls += 1
-                yield scrapy.Request(url=parse.urljoin(response.url, post_url), meta={"post_first_image_url": post_first_image_url}, callback=self.parse_detail, dont_filter=True)
+        logger.info(f'we get the queue len:{self.queue.size()}')
 
-        once_total = 0
+        if orm.check_if_exceed_num(self.name, self.count.get_value()):
+            logger.warning(f'exceed and clear the pending list and nothing to do.')
+            self.queue.clear()
+            return
 
+        yield from self.process_next_url()
 
-        if len(post_nodes) <= 0:
-            if self._check_detail_page_by_url(response.url) is not None:
-                yield scrapy.Request(url=response.url, callback=self.parse_detail, dont_filter=True)
-
-        # get the url of sub new and call the callback function to parse
-
-        # get next page url and to download
-        # get more load button
-        # load_more_stories = response.css('button[data-component="PaginationLoadMoreButton"]')
-        print("total urls:", self.total_urls)
+    def process_next_url(self):
+        """
+        Fetch the next URL from the Redis queue and schedule it.
+        """
+        task = self.queue.pop()
+        if task:
+            next_url = task.get("url")
+            if next_url:
+                yield scrapy.Request(next_url, callback=self.detail_parse, dont_filter=True)
 
 
     # scrapy shell https://www.abc.net.au/news/2025-02-03/alice-springs-cairns-flight-central-australia-tourism-season/104888858
     # scrapy shell to manual code the css selector
-    def parse_detail(self, response):
+    def detail_parse(self, response):
 
         is_priority = response.meta.get('is_priority', False)
 
 
         if not is_priority:
-            if orm.check_if_exceed_num(self.name):
+            if orm.check_if_exceed_num(self.name, self.count.get_value()):
                 return
 
         self.log(f"I just visited parse detail {response.url}")
@@ -197,12 +217,3 @@ class AbcSpider(RedisSpider):
             yield abc_item
         else:
             print("nothing to do due to invalid item: ", abc_item)
-
-
-    # check if it is detail url or not by search the year-month-day
-    # https://www.abc.net.au/news/2025-02-09/sam-konstas-the-gabba-new-south-wales-queensland/104915602
-    def _check_detail_page_by_url(self, url):
-        m = re.search(r'(20\d{2})[/:-]([0-1]?\d)[/:-]([0-3]?\d)', url)
-        res = ' '.join(m.groups()) if m else None
-        return res
-

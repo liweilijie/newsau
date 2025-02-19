@@ -14,12 +14,16 @@ import selenium.webdriver.support.expected_conditions as EC  # noqa
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 from scrapy.selector import Selector
-from newsau.settings import AFR_USER, AFR_PASSWORD
+from newsau.settings import AFR_USER, AFR_PASSWORD, NEWS_ACCOUNTS
 from urllib.parse import urljoin
 from newsau.parse import afrparse
 from newsau.db import orm
+from newsau.cache import url_queue, rcount
+from newsau.settings import REDIS_URL
+from selenium.webdriver.chrome.options import Options
 
 logger = logging.getLogger('afr')
+logging.getLogger('selenium.webdriver.remote.remote_connection').setLevel(logging.WARNING)
 
 class AfrSpider(RedisSpider):
     name = "afr"
@@ -50,10 +54,25 @@ class AfrSpider(RedisSpider):
         self.retry = 3
         self.cookies = None
 
+        self.queue = url_queue.RedisUrlQueue(self.name, REDIS_URL)
+        self.count = rcount.RedisCounter(self.name, REDIS_URL)
+        if self.count.get_value() is None or self.count.get_value() <= 0:
+            self.count.set_value(NEWS_ACCOUNTS[self.name]["count_everyday"])
+        logger.info(f'current count_everyday is:{self.count.get_value()}')
+
         self.user = AFR_USER
         self.password = AFR_PASSWORD
+
+        options = Options()
+
+        options.headless = True
+        options.add_argument("--log-level=3")  # just show error
+        options.add_argument("--silent")  # not show log
+
+        # 禁用子进程
+        self.driver = uc.Chrome(options=options, headless=True, use_subprocess=False)
         # TODO: use_subprocess
-        self.driver = uc.Chrome(headless=True, use_subprocess=False)
+        # self.driver = uc.Chrome(headless=True, use_subprocess=False)
         self.wait = WebDriverWait(self.driver, 20)
         self.is_login = False
         self.js = "window.scrollTo(0, document.body.scrollHeight)"
@@ -72,13 +91,22 @@ class AfrSpider(RedisSpider):
     def parse(self, response):
 
         is_priority = False
+        schedule_num = None
+
         if response.request.meta is not None:
             schedule = response.request.meta.get("schedule")
             if schedule is not None and schedule == "priority_url":
                 is_priority = True
 
+        if response.request.meta is not None:
+            schedule_num = response.request.meta.get("schedule_num")
+            if schedule_num is not None and schedule_num > 0:
+                logger.info(f'before count_everyday:{self.count.get_value()}')
+                self.count.increment(schedule_num)
+                logger.info(f'result current count_everyday:{self.count.get_value()}')
+
         if not is_priority:
-            if orm.check_if_exceed_num(self.name):
+            if orm.check_if_exceed_num(self.name, self.count.get_value()):
                 logger.info('exceed and return.')
                 return
 
@@ -90,18 +118,11 @@ class AfrSpider(RedisSpider):
 
         logger.info(f'we start get {response.url}')
 
-        if is_priority:
-            self.total_urls += 1
-            self.log(f"direct {schedule} parse_detail {response.url}")
-            if afrparse.contains_date(response.url):
-                yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True, meta={"is_priority": is_priority})
-                return
-
         # if not response.url.rstrip('/').endswith(self.home_url):
-        if afrparse.contains_date(response.url):
+        if common.contains_valid_date(response.url):
             self.total_urls += 1
             logger.info(f'total_urls:{self.total_urls} and {response.url} not in {self.home_url} and detail_parse to process.')
-            yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True)
+            yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True, meta={"is_priority": is_priority})
             return
 
         self.driver.get(response.url)
@@ -110,7 +131,7 @@ class AfrSpider(RedisSpider):
         self.driver.execute_script(self.js)
 
         page_text = self.driver.page_source
-        logger.debug(f'page_text:{page_text}')
+        # logger.debug(f'page_text:{page_text}')
 
         # pickle.dump(page_text, open("home.html", "wb"))
 
@@ -118,19 +139,35 @@ class AfrSpider(RedisSpider):
 
         sections = body.xpath('//*[@id="content"]/section[2]//a/@href').extract()
 
-        total = 0
+        # total = 0
         for a in sections:
             url = urljoin(self.domain, a)
-            if afrparse.contains_date(url):
-                logger.info(f'a:{url}')
-                self.total_urls += 1
-                total += 1
-                logger.info(f'total_urls:{self.total_urls} this time find total: {total} and process:{url}')
-                if not orm.check_if_exceed_num(self.name):
-                    yield scrapy.Request(url=url, callback=self.detail_parse, dont_filter=True)
+            if common.contains_valid_date(url):
+                if not orm.query_object_id(self.name, url):
+                    logger.info(f'a:{url} and push to queue')
+                    self.queue.push(url)
                 else:
-                    logger.info('exceed and return.')
-                    return
+                    logger.info(f'do nothing because already in db:{url}')
+
+        logger.info(f'we get the queue len:{self.queue.size()}')
+
+        if orm.check_if_exceed_num(self.name, self.count.get_value()):
+            logger.warning(f'exceed and clear the pending list and nothing to do.')
+            self.queue.clear()
+            return
+
+        yield from self.process_next_url()
+
+
+    def process_next_url(self):
+        """
+        Fetch the next URL from the Redis queue and schedule it.
+        """
+        task = self.queue.pop()
+        if task:
+            next_url = task.get("url")
+            if next_url:
+                yield scrapy.Request(next_url, callback=self.detail_parse, dont_filter=True)
 
 
     def detail_parse(self, response):
@@ -138,7 +175,7 @@ class AfrSpider(RedisSpider):
         is_priority = response.meta.get('is_priority', False)
 
         if not is_priority:
-            if orm.check_if_exceed_num(self.name):
+            if orm.check_if_exceed_num(self.name, self.count.get_value()):
                 return
 
         self.loop_login()
@@ -170,282 +207,249 @@ class AfrSpider(RedisSpider):
         page_text = self.driver.page_source
         # logger.debug(f'page_text:{page_text}')
 
-        body = Selector(text=page_text)
-        # content = Selector(text=page_text).xpath('//div[@id="endOfArticle"]').extract_first('').strip()
-        # print(content)
+        try:
+            body = Selector(text=page_text)
 
-        pickle.dump(page_text, open("p1.html", "wb"))
+            # pickle.dump(page_text, open("p1.html", "wb"))
 
-        # //*[@id="content"]/header/h1
-        # //*[@id="content"]/header/div[1]/h1
-        post_content = ""
+            post_content = ""
 
-        post_title = body.xpath('//*[@id="content"]/header//h1/text()').extract_first('').strip()
-        if post_title == '' or post_title is None:
-            self.log(f"afr no title found in {response.url}")
-            return
-        logger.info(f'post_title:{post_title}')
-        # //*[@id="content"]/header/div[1]/p
-        post_sub_title = body.xpath('//*[@id="content"]/header/p[2]/text()').extract_first('').strip()
-        logger.info(f'post_sub_title:{post_sub_title}')
-        if post_sub_title == '' or post_sub_title is None:
-            post_sub_title = body.xpath('//*[@id="content"]/header/div[1]/p').extract_first('').strip()
-        if post_sub_title == '' or post_sub_title is None:
-            # //*[@id="content"]/header/p
-            post_sub_title = body.xpath('//*[@id="content"]/header/p').extract_first('').strip()
+            post_title = body.xpath('//*[@id="content"]/header//h1/text()').extract_first('').strip()
+            if post_title == '' or post_title is None:
+                # self.log(f"afr no title found in {response.url}")
+                raise f'afr no title found in {response.url}'
+            logger.info(f'post_title:{post_title}')
+            # //*[@id="content"]/header/div[1]/p
+            post_sub_title = body.xpath('//*[@id="content"]/header/p[2]/text()').extract_first('').strip()
+            logger.info(f'post_sub_title:{post_sub_title}')
+            if post_sub_title == '' or post_sub_title is None:
+                post_sub_title = body.xpath('//*[@id="content"]/header/div[1]/p').extract_first('').strip()
+            if post_sub_title == '' or post_sub_title is None:
+                # //*[@id="content"]/header/p
+                post_sub_title = body.xpath('//*[@id="content"]/header/p').extract_first('').strip()
 
-        if post_sub_title == '' or post_sub_title is None:
-            logger.info(f'post_sub_title is empty.')
-        else:
-            post_content = post_sub_title
-
-        post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
-        logger.info(f'post_time:{post_time}')
-        if post_time == '' or post_time is None:
-            # //*[@id="content"]/div[1]/section/section/section/div[1]/time
-            # //*[@id="content"]/div[1]/section/section/section/div[1]/time
-            post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
-
-        post_author = body.xpath('//*[@id="content"]/header/span/span[1]/strong/a/text()').extract_first('').strip()
-        logger.info(f'post_author:{post_author}')
-        if post_author == '' or post_author is None:
-            # //*[@id="content"]/div[1]/section/section/div/span/span
-            post_author = body.xpath('//*[@id="content"]/div[1]/section/section/div/span[@data-testid="AuthorNames"]/span')
-
-        post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p" or name()="figure"]').extract()
-        # post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p"]').extract()
-        if not post_content_before:
-            logger.info(f'post_content_before is empty by beyondwords-player.')
-            # //*[@id="content"]/div[2]
-            post_content_before = body.xpath('//*[@id="content"]/div[2]').extract_first('').strip()
-            if post_content_before == "" or post_content_before is None:
-                # //*[@id="content"]/div[1]/section
-                post_content_before = body.xpath('//*[@id="content"]/div[1]/section').extract_first('').strip()
-                logger.info(f'post_content_before is empty.')
+            if post_sub_title == '' or post_sub_title is None:
+                logger.info(f'post_sub_title is empty.')
             else:
+                post_content = post_sub_title
+
+            post_time = body.xpath('//*[@id="content"]//time[@data-testid="ArticleTimestamp-time"]/text()').extract_first('').strip()
+            logger.info(f'post_time:{post_time}')
+            if post_time == '' or post_time is None:
+                # //*[@id="content"]/div[1]/section/section/section/div[1]/time
+                # //*[@id="content"]/div[1]/section/section/section/div[1]/time
+                post_time = body.xpath('//*[@id="content"]/div[2]/section/div[1]/time/text()').extract_first('').strip()
+
+            post_author = body.xpath('//*[@id="content"]/header/span/span[1]/strong/a/text()').extract_first('').strip()
+            logger.info(f'post_author:{post_author}')
+            if post_author == '' or post_author is None:
+                # //*[@id="content"]/div[1]/section/section/div/span/span
+                post_author = body.xpath('//*[@id="content"]/div[1]/section/section/div/span[@data-testid="AuthorNames"]/span')
+
+            post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p" or name()="figure"]').extract()
+            # post_content_before = body.xpath('//div[@id="beyondwords-player"]//parent::div/following-sibling::*[name()="p"]').extract()
+            if not post_content_before:
+                logger.info(f'post_content_before is empty by beyondwords-player.')
+                # //*[@id="content"]/div[2]
+                post_content_before = body.xpath('//*[@id="content"]/div[2]').extract_first('').strip()
+                if post_content_before == "" or post_content_before is None:
+                    # //*[@id="content"]/div[1]/section
+                    post_content_before = body.xpath('//*[@id="content"]/div[1]/section').extract_first('').strip()
+                    logger.info(f'post_content_before is empty.')
+                else:
+                    post_content += post_content_before
+
+
+            else:
+                post_content_before = ''.join(post_content_before)
                 post_content += post_content_before
 
-
-        else:
-            post_content_before = ''.join(post_content_before)
-            post_content += post_content_before
-
-        logger.info(f'post_content_before:{post_content_before}')
+            # logger.info(f'post_content_before:{post_content_before}')
 
 
-        post_content_end = body.xpath('//*[@id="endOfArticle"]').extract_first('').strip()
-        if post_content_end == "" or post_content_end is None:
-            # //*[@id="endOfArticle"]
-            logger.info(f'post_content_end is empty.')
-        else:
-            post_content = post_content + post_content_end
+            post_content_end = body.xpath('//*[@id="endOfArticle"]').extract_first('').strip()
+            if post_content_end == "" or post_content_end is None:
+                # //*[@id="endOfArticle"]
+                logger.info(f'post_content_end is empty.')
+            else:
+                post_content = post_content + post_content_end
 
-        logger.info(f'post_content_end:{post_content_end}')
+            # logger.info(f'post_content_end:{post_content_end}')
 
-        if body.xpath('//*[@id="content"]/div[2]/div[1]').xpath('@id').extract_first('') == 'endOfArticle':
-            logger.warning(f'post_content only one part.')
-            post_content = body.xpath('//*[@id="endOfArticle"]').extract_first('').strip()
+            if body.xpath('//*[@id="content"]/div[2]/div[1]').xpath('@id').extract_first('') == 'endOfArticle':
+                logger.warning(f'post_content only one part.')
+                post_content = body.xpath('//*[@id="endOfArticle"]').extract_first('').strip()
 
-        afr_item = AfrDataItem()
-        afr_item["name"] = self.name
-        afr_item["priority"] = is_priority
+            afr_item = AfrDataItem()
+            afr_item["name"] = self.name
+            afr_item["priority"] = is_priority
 
-        afr_item["origin_title"] = post_title
-        afr_item["topic"] = 'financial'
-        afr_item["url"] = response.url
-        afr_item["url_object_id"] = common.get_md5(afr_item["url"])
-        afr_item["post_date"] = common.afr_convert_to_datetime(afr_item.get("post_time", ""))
+            afr_item["origin_title"] = post_title
+            afr_item["topic"] = 'financial'
+            afr_item["url"] = response.url
+            afr_item["url_object_id"] = common.get_md5(afr_item["url"])
+            afr_item["post_date"] = common.afr_convert_to_datetime(afr_item.get("post_time", ""))
 
-        # TODO: check this url_object_id if exist in db
-        if orm.query_object_id(self.name, afr_item["url_object_id"]):
-            logger.warning(f"url: {afr_item['url']} already exist in db nothing to do.")
-            return
+            # TODO: check this url_object_id if exist in db
+            if orm.query_object_id(self.name, afr_item["url_object_id"]):
+                logger.warning(f"url: {afr_item['url']} already exist in db nothing to do.")
+                raise f'url: {afr_item["url"]} already exist in db nothing to do.'
 
 
-        # 'Feb 12, 2025 – 10.41am'
-        # afr_item["post_date"] = common.convert_to_datetime(post_time)
-        afr_item["post_date"] = common.convert_to_datetime(None)
+            # 'Feb 12, 2025 – 10.41am'
+            # afr_item["post_date"] = common.convert_to_datetime(post_time)
+            afr_item["post_date"] = common.convert_to_datetime(None)
 
-        # self.mysqlObj.get_news_category(self.name, afr_item["topic"])
-        afr_item["category"] = "投资、理财"
+            # self.mysqlObj.get_news_category(self.name, afr_item["topic"])
+            afr_item["category"] = "投资、理财"
 
-        afr_item["front_image_url"] = []
+            afr_item["front_image_url"] = []
 
-        logger.info(f'post_content:{post_content}')
+            # logger.info(f'post_content:{post_content}')
 
-        if post_content == '':
-            logger.warning(f'post_content is empty and return nothing to do {response.url}.')
-            return
+            if post_content == '':
+                logger.warning(f'post_content is empty and return nothing to do {response.url}.')
+                raise f'post_content is empty and return nothing to do {response.url}.'
 
-        # pickle.dump(post_content, open("cb.html", "wb"))
+            # pickle.dump(post_content, open("cb.html", "wb"))
 
-        # process the content
-        # find all the images src in the post_content
-        # and store these images src
-        # and replace the domain of the src in post_content
-        soup = BeautifulSoup(post_content,"html.parser")
+            # process the content
+            # find all the images src in the post_content
+            # and store these images src
+            # and replace the domain of the src in post_content
+            soup = BeautifulSoup(post_content,"html.parser")
 
-        # soup = afrparse.process_img_picture(soup)
-        # Process <img> tags
-        for img in soup.find_all("img"):
-            if img.has_attr("src"):
-                original_src = img["src"]
-                try:
-                    if original_src.startswith("http") or original_src.startswith("https"):
-                        afr_item["front_image_url"].append(original_src)
-                        img["src"] = common.get_finished_image_url(self.name, afr_item["url_object_id"], original_src)
-                        print(f'Updated <img> src: {original_src} -> {img["src"]}')
-                    else:
-                        print(f'Skipping <img> src (no change): {original_src}')
-                except Exception as e:
-                    print(f'Error processing <img> src: {original_src} -> {e}')
-
-            if img.has_attr("srcset"):
-                original_srcset = img["srcset"]
-                try:
-                    updated_srcset = []
-                    for url in original_srcset.split(","):
-                        url_parts = url.split()[0]
-                        if url_parts.startswith("http") or url_parts.startswith("https"):
-                            afr_item["front_image_url"].append(url_parts)  # save origin image url
-                            updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
-                                " " + url.split()[1] if len(url.split()) > 1 else ""))
+            # soup = afrparse.process_img_picture(soup)
+            # Process <img> tags
+            for img in soup.find_all("img"):
+                if img.has_attr("src"):
+                    original_src = img["src"]
+                    try:
+                        if original_src.startswith("http") or original_src.startswith("https"):
+                            afr_item["front_image_url"].append(original_src)
+                            img["src"] = common.get_finished_image_url(self.name, afr_item["url_object_id"], original_src)
+                            print(f'Updated <img> src: {original_src} -> {img["src"]}')
                         else:
-                            updated_srcset.append(url)  # stay origin url not process if not http or https prefix
-                    img["srcset"] = ", ".join(updated_srcset)
-                    print(f'Updated <img> srcset: {original_srcset} -> {img["srcset"]}')
-                except Exception as e:
-                    print(f'Error processing <img> srcset: {original_srcset} -> {e}')
+                            print(f'Skipping <img> src (no change): {original_src}')
+                    except Exception as e:
+                        print(f'Error processing <img> src: {original_src} -> {e}')
 
-        # Process <source> tags inside <picture>
-        for source in soup.find_all("source"):
-            if source.has_attr("srcset"):
-                original_srcset = source["srcset"]
-                try:
-                    # save srcset URL
-                    updated_srcset = []
-                    for url in original_srcset.split(","):
-                        url_parts = url.split()[0]
-                        if url_parts.startswith("http") or url_parts.startswith("https"):
-                            afr_item["front_image_url"].append(url_parts)  # stay origin url
-                            updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
-                                " " + url.split()[1] if len(url.split()) > 1 else ""))
-                        else:
-                            updated_srcset.append(url)  # stay origin url not process if not http or https prefix
-                    source["srcset"] = ", ".join(updated_srcset)
-                    print(f'Updated <source> srcset: {original_srcset} -> {source["srcset"]}')
-                except Exception as e:
-                    print(f'Error processing <source> srcset: {original_srcset} -> {e}')
-
-        # Process data-pb-im-config attribute in <img> and <source> tags
-        for tag in soup.find_all(["img", "source"]):
-            if tag.has_attr("data-pb-im-config"):
-                try:
-                    # Extract the JSON from the attribute
-                    config_json = json.loads(tag["data-pb-im-config"])
-
-                    # Check if the 'urls' field exists
-                    if "urls" in config_json:
-                        # Replace URLs while preserving the scaling factor (e.g., 1x, 2x)
-                        updated_urls = []
-                        for url in config_json["urls"]:
-                            url_parts = url.strip().split()
-                            if len(url_parts) > 1:  # If the URL has a scaling factor (e.g., 2x)
-                                if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
-                                    afr_item["front_image_url"].append(url_parts[0])  # save origin url
-                                    url_with_scaling = f"{common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0])} {url_parts[1]}"
-                                    updated_urls.append(url_with_scaling)
-                                else:
-                                    updated_urls.append(url)  # do nothing
+                if img.has_attr("srcset"):
+                    original_srcset = img["srcset"]
+                    try:
+                        updated_srcset = []
+                        for url in original_srcset.split(","):
+                            url_parts = url.split()[0]
+                            if url_parts.startswith("http") or url_parts.startswith("https"):
+                                afr_item["front_image_url"].append(url_parts)  # save origin image url
+                                updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
+                                    " " + url.split()[1] if len(url.split()) > 1 else ""))
                             else:
-                                if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
-                                    afr_item["front_image_url"].append(url_parts[0])  # save origin url to download
-                                    updated_urls.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0]))
+                                updated_srcset.append(url)  # stay origin url not process if not http or https prefix
+                        img["srcset"] = ", ".join(updated_srcset)
+                        print(f'Updated <img> srcset: {original_srcset} -> {img["srcset"]}')
+                    except Exception as e:
+                        print(f'Error processing <img> srcset: {original_srcset} -> {e}')
+
+            # Process <source> tags inside <picture>
+            for source in soup.find_all("source"):
+                if source.has_attr("srcset"):
+                    original_srcset = source["srcset"]
+                    try:
+                        # save srcset URL
+                        updated_srcset = []
+                        for url in original_srcset.split(","):
+                            url_parts = url.split()[0]
+                            if url_parts.startswith("http") or url_parts.startswith("https"):
+                                afr_item["front_image_url"].append(url_parts)  # stay origin url
+                                updated_srcset.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts) + (
+                                    " " + url.split()[1] if len(url.split()) > 1 else ""))
+                            else:
+                                updated_srcset.append(url)  # stay origin url not process if not http or https prefix
+                        source["srcset"] = ", ".join(updated_srcset)
+                        print(f'Updated <source> srcset: {original_srcset} -> {source["srcset"]}')
+                    except Exception as e:
+                        print(f'Error processing <source> srcset: {original_srcset} -> {e}')
+
+            # Process data-pb-im-config attribute in <img> and <source> tags
+            for tag in soup.find_all(["img", "source"]):
+                if tag.has_attr("data-pb-im-config"):
+                    try:
+                        # Extract the JSON from the attribute
+                        config_json = json.loads(tag["data-pb-im-config"])
+
+                        # Check if the 'urls' field exists
+                        if "urls" in config_json:
+                            # Replace URLs while preserving the scaling factor (e.g., 1x, 2x)
+                            updated_urls = []
+                            for url in config_json["urls"]:
+                                url_parts = url.strip().split()
+                                if len(url_parts) > 1:  # If the URL has a scaling factor (e.g., 2x)
+                                    if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
+                                        afr_item["front_image_url"].append(url_parts[0])  # save origin url
+                                        url_with_scaling = f"{common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0])} {url_parts[1]}"
+                                        updated_urls.append(url_with_scaling)
+                                    else:
+                                        updated_urls.append(url)  # do nothing
                                 else:
-                                    updated_urls.append(url)  # do nothing
+                                    if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
+                                        afr_item["front_image_url"].append(url_parts[0])  # save origin url to download
+                                        updated_urls.append(common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0]))
+                                    else:
+                                        updated_urls.append(url)  # do nothing
 
-                        config_json["urls"] = updated_urls
+                            config_json["urls"] = updated_urls
 
-                        # Reassign the updated JSON back to the attribute
-                        tag["data-pb-im-config"] = json.dumps(config_json)
-                        print(f'Updated data-pb-im-config for {tag}: {tag["data-pb-im-config"]}')
-                except Exception as e:
-                    print(f'Error processing data-pb-im-config for {tag}: {e}')
+                            # Reassign the updated JSON back to the attribute
+                            tag["data-pb-im-config"] = json.dumps(config_json)
+                            print(f'Updated data-pb-im-config for {tag}: {tag["data-pb-im-config"]}')
+                    except Exception as e:
+                        print(f'Error processing data-pb-im-config for {tag}: {e}')
 
-        #end
+            #end
 
-        # # delete source element TODO: need optimization
-        # for picture in soup.find_all('picture'):
-        #     for source in picture.find_all('source'):
-        #         source.decompose()
-        #
-        # for img in soup.find_all('img'):
-        #     if img['src'].startswith("https") or img['src'].startswith("http"):
-        #         afr_item["front_image_url"].append(img['src'])  # append origin url to download
-        #         img['src'] = common.get_finished_image_url('afr', afr_item["url_object_id"], img['src'])  # replace our website image url from cdn
-        #         if "srcset" in img.attrs:
-        #             del img.attrs["srcset"]
-        #         if "data-pb-im-config" in img.attrs:
-        #             del img.attrs["data-pb-im-config"]
-        #     else:
-        #         img.decompose()
-        # # for img in soup.find_all('img'):
-        # #     afr_item["front_image_url"].append(img['src']) # append origin url to download
-        # #     img['src'] = common.get_finished_image_url(self.name, afr_item["url_object_id"], img['src']) # replace our website image url from cdn
-        # #     if "srcset" in img.attrs:
-        # #         del img.attrs["srcset"]
-        # #     if "data-pb-im-config" in img.attrs:
-        # #         del img.attrs["data-pb-im-config"]
+            # find all a label
+            for a in soup.find_all('a'):
+                # replace all a label with its text
+                a.replace_with(a.text)
 
+            # trim data-testid="beyondwords-player-wrapper"
+            for div in soup.find_all('div', {"data-testid":"beyondwords-player-wrapper"}):
+                div.decompose()
 
-        # find all a label
-        for a in soup.find_all('a'):
-            # replace all a label with its text
-            a.replace_with(a.text)
+            # trim div id="beyondwords-player"
+            for div in soup.find_all('div', {"id":"beyondwords-player"}):
+                div.decompose()
 
-        # trim data-testid="beyondwords-player-wrapper"
-        for div in soup.find_all('div', {"data-testid":"beyondwords-player-wrapper"}):
-            div.decompose()
+            # trim div data-experiment-target="relatedStory"
+            for div in soup.find_all('div', {"data-experiment-target":"relatedStory"}):
+                div.decompose()
 
-        # trim div id="beyondwords-player"
-        for div in soup.find_all('div', {"id":"beyondwords-player"}):
-            div.decompose()
+            # trim span data-component="Loading" data-print="inline-media"
+            for span in soup.find_all('span', {"data-component":"Loading"}):
+                span.decompose()
 
-        # trim div data-experiment-target="relatedStory"
-        for div in soup.find_all('div', {"data-experiment-target":"relatedStory"}):
-            div.decompose()
+            # trim <small class="acd99af3e011c9b90ee4" style="display: block;">Advertisement</small>
+            for small in soup.find_all('small', string="Advertisement"):
+                small.decompose()
 
-        # trim span data-component="Loading" data-print="inline-media"
-        for span in soup.find_all('span', {"data-component":"Loading"}):
-            span.decompose()
-            
-        # trim <small class="acd99af3e011c9b90ee4" style="display: block;">Advertisement</small>
-        for small in soup.find_all('small', string="Advertisement"):
-            small.decompose()
+            # aria-label="Advertisement"
+            for label in soup.find_all('iframe', {"aria-label":"Advertisement"}):
+                label.decompose()
 
-        # aria-label="Advertisement"
-        for label in soup.find_all('iframe', {"aria-label":"Advertisement"}):
-            label.decompose()
+            post_content = str(soup)
+            afr_item["origin_content"] = post_content
 
-        # num_text_element = bsobj.find('span', {'class': 'nums_text'})
-        # nums = filter(lambda s: s == ',' or s.isdigit(), num_text_element.text)
-        # elements = soup.find_all('div', {'class': re.compile('c-container')})
-        # for element in elements:
-        #     title = element.h3.a.text.strip() if element.h3 and element.h3.a else ""
-        #     link = element.h3.a['href'] if element.h3 and element.h3.a else ""
+            # pickle.dump(post_content, open("ca.html", "wb"))
 
-        post_content = str(soup)
-        afr_item["origin_content"] = post_content
-
-        # pickle.dump(post_content, open("ca.html", "wb"))
-
-        # logger.info(f'afr_item:{afr_item}')
-
-        if afr_item["url"] != "" and afr_item["origin_title"] != "" and afr_item["origin_content"] != "":
             # logger.info(f'afr_item:{afr_item}')
-            yield afr_item
-        else:
-            print("nothing to do due to invalid item: ", afr_item)
+
+            if afr_item["url"] != "" and afr_item["origin_title"] != "" and afr_item["origin_content"] != "":
+                yield afr_item
+            else:
+                print("nothing to do due to invalid item: ", afr_item)
+        except Exception as e:
+            logger.error(f'detail_parse:{response.url} and happened error:{e}')
 
 
     def login(self):
@@ -538,4 +542,3 @@ class AfrSpider(RedisSpider):
             logger.info(f'check_is_login:check_name:{check_name} is not login')
 
         return self.is_login
-
