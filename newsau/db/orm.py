@@ -1,10 +1,10 @@
 import logging
-from sqlalchemy.exc import SQLAlchemyError
 
 from newsau.db import session
 from newsau.db.models import WPScrapyNews, WPScrapyCategory
-from sqlalchemy import and_
-from sqlalchemy import func
+
+from sqlalchemy import func, and_
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger("mysql")
 
@@ -33,6 +33,29 @@ def query_object_id(name: str, url_object_id: str) -> bool:
         logger.error(f"Unexpected error when query_object_id name:{name}, url_object_id:{url_object_id}: {e}")
 
     return False
+
+
+def count_urls_today_and_yesterday(name: str):
+    try:
+        # 统计今天和昨天的数量
+        count = session.query(WPScrapyNews).filter(
+            and_(
+                WPScrapyNews.name == name,
+                func.DATE(WPScrapyNews.post_date).in_([func.current_date(), func.current_date() - 1])
+            )
+        ).count()
+        session.commit()
+
+        logger.info(f'Today and Yesterday count: {count}')
+        return count if count is not None else 0
+
+    except SQLAlchemyError as e:
+        logger.error(f"SQLAlchemyError when querying object_id name:{name}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error when querying object_id name:{name}: {e}")
+
+    return 0
+
 
 def count_urls_today(name: str):
     try:
@@ -80,6 +103,15 @@ def get_category(name, topic):
 
     return None
 
+
+def check_if_exceed_num_today_and_yesterday(name, max_value):
+    current_count = count_urls_today_and_yesterday(name)
+
+    if current_count >= max_value:
+        logger.info(
+            f"afr we had {current_count} >= {max_value} and exceed the count limit and do nothing.")
+        return True
+    return False
 
 
 # check if exceed

@@ -177,6 +177,7 @@ class AbcSpider(RedisSpider):
         abc_item["url"] = response.url
         abc_item["url_object_id"] = common.get_md5(abc_item["url"])
 
+
         # TODO: check this url_object_id if exist in db
         if orm.query_object_id(self.name, abc_item["url_object_id"]):
             print(f"url: {abc_item['url']} already exist in db nothing to do.")

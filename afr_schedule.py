@@ -25,8 +25,8 @@ class AfrSchedule(object):
             raise e
 
     def afr_job(self):
-        self.r.lpush(self.spider_key, '{"url": "https://www.afr.com", "meta": {"schedule_num":2}}')
-        logger.info(f'lpush {self.spider_key} {{"url": "https://www.afr.com", "meta": {{"schedule_num":2}}}}')
+        self.r.lpush(self.spider_key, '{"url": "https://www.afr.com", "meta": {"schedule_num":1}}')
+        logger.info(f'lpush {self.spider_key} {{"url": "https://www.afr.com", "meta": {{"schedule_num":1}}}}')
 
 def main():
 
@@ -57,7 +57,7 @@ def main():
     schedule.every().day.at("18:00", "Australia/Sydney").do(afr_schedule.afr_job)
     schedule.every().day.at("19:00", "Australia/Sydney").do(afr_schedule.afr_job)
     schedule.every().day.at("20:00", "Australia/Sydney").do(afr_schedule.afr_job)
-    schedule.every().day.at("21:00", "Australia/Sydney").do(afr_schedule.afr_job)
+    # schedule.every().day.at("21:00", "Australia/Sydney").do(afr_schedule.afr_job)
 
     # schedule.every(10).minutes.do(job)
     # schedule.every().hour.do(job)

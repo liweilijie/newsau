@@ -17,7 +17,7 @@ class WpApi():
     self.sydney_tz = pytz.timezone("Australia/Sydney")
 
 
-  def post(self, title, content, post_date=None, status='publish', categories=['澳洲新闻'], tags=[]):
+  def post(self, title, content, post_date=None, status='publish', categories=['澳洲新闻'], tags=[], post_type=None):
     # post and activate new post
     if title == "" or content == "":
       return
@@ -25,6 +25,9 @@ class WpApi():
     post = WordPressPost()
     post.title = title
     post.content = content
+    # newsflash = "newsflashes"
+    if post_type:
+      post.post_type = post_type
 
     # Save the post as a draft for review
     # post.post_status = 'draft'
@@ -34,14 +37,17 @@ class WpApi():
     if post_date is None or post_date == "":
       post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
     else:
-      try:
-        sydney_time = datetime.strptime(post_date, "%Y-%m-%d %H:%M:%S")
-        sydney_time = self.sydney_tz.localize(sydney_time)
+      if post_type and post_type == "newsflashes":
+        post.date = post_date
+      else:
+        try:
+          sydney_time = datetime.strptime(post_date, "%Y-%m-%d %H:%M:%S")
+          sydney_time = self.sydney_tz.localize(sydney_time)
 
-        post.date = sydney_time.astimezone(pytz.utc)
-      except Exception as e:
-        print(f'convert {post_date} to datetime error: {e}')
-        post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
+          post.date = sydney_time.astimezone(pytz.utc)
+        except Exception as e:
+          print(f'convert {post_date} to datetime error: {e}')
+          post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
 
     # print(f'post utc date:{post.date}')
 
@@ -49,12 +55,20 @@ class WpApi():
     #   'post_tag': ['test', 'firstpost'],
     #   'category': ['Introductions', 'Tests']
     # }
-    post.terms_names = {
-      'post_tag': tags,
-      'category': categories
-    }
+    if post_type is not None and post_type == "newsflashes":
+      post.terms_names = {
+        'newsflashes_tags': tags
+      }
 
-    self.client.call(NewPost(post))
+    else:
+      post.terms_names = {
+        'post_tag': tags,
+        'category': categories
+      }
+
+    post_id = self.client.call(NewPost(post))
+    print(f'send wordpress successful and post_id:{post_id}')
+    return post_id
 
 if __name__ == "__main__":
   title = 'A possible replacement is to use pip for package installation..'
@@ -71,5 +85,5 @@ Building wheels for collected packages: python-wordpress-xmlrpc
 
   from newsau.settings import WP_XMLURL, WP_USER, WP_PASSWORD
   wp = WpApi(WP_XMLURL, WP_USER, WP_PASSWORD)
-  date_str = "2025-02-10T04:55:05.000Z"
-  wp.post(title, content, post_date=common.convert_to_datetime(date_str), tags=["abc", "wordpress"], categories=["news"])
+  date_str = "2025-02-20T04:55:05.000Z"
+  wp.post(title, content, post_date=common.convert_to_datetime(date_str), tags=["abc", "wordpress"], categories=["news"], post_type="newsflashes")

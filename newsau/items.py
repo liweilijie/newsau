@@ -108,6 +108,7 @@ class AfrDataItem(scrapy.Item):
     origin_content = scrapy.Field()
     content = scrapy.Field()
     post_date = scrapy.Field()
+    post_type = scrapy.Field()
     scrapy_date = scrapy.Field()
     priority = scrapy.Field()
 
@@ -174,3 +175,54 @@ class AfrDataItem(scrapy.Item):
     def get_content(self):
         return self.get("content", "")
 
+
+class ParkNewsDataItem(scrapy.Item):
+    name = scrapy.Field()
+    origin_title = scrapy.Field()
+    title = scrapy.Field()
+    url = scrapy.Field()
+    url_object_id = scrapy.Field()
+    topic = scrapy.Field()
+    category = scrapy.Field()
+    front_image_url = scrapy.Field()
+    front_image_path = scrapy.Field()
+    origin_content = scrapy.Field()
+    content = scrapy.Field()
+    post_date = scrapy.Field()
+    scrapy_date = scrapy.Field()
+    priority = scrapy.Field()
+    post_type = scrapy.Field()
+
+    def convert_to_wp_news(self):
+        if self.get("title", "") == "" or self.get("content", "") == "":
+            return None
+
+        return WPScrapyNews(
+            name=self.get("name", ""),
+            origin_title=self.get("origin_title", ""),
+            title=self.get("title", ""),
+            topic=self.get("topic", ""),
+            category=self.get("category", ""),
+            url=self.get("url", ""),
+            url_object_id=self.get("url_object_id", ""),
+            front_image_url=",".join(self.get("front_image_url", ["empty"])),
+            front_image_path=",".join(self.get("front_image_path", ["empty"])),
+            origin_content=self.get("origin_content", ""),
+            content=self.get("content", ""),
+            post_date=self.get("post_date", common.convert_to_datetime(None)),
+            scrapy_date=self.get("scrapy_date", common.convert_to_datetime(None)),
+        )
+
+
+    def get_post_category(self):
+        return self.get("category", "最前沿")
+
+
+    def get_post_date(self):
+        return self.get("post_date", common.convert_to_datetime(None))
+
+    def get_title(self):
+        return self.get("title", "")
+
+    def get_content(self):
+        return self.get("content", "")

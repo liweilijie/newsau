@@ -59,36 +59,52 @@ class AbcContentTranslatePipeline(object):
         # item["title"] = item["origin_title"]
         # item["content"] = item["origin_content"]
         # return item
+        if spider.name == "parknews":
+            if item["origin_title"] != "":
+                tr_title = self.op.retry_translate_c2c_title(item["origin_title"])
+                if tr_title:
+                    logger.info(f"{item['origin_title']}=>{tr_title}")
+                    item["title"] = tr_title
 
-        if item["origin_title"] != "":
-            tr_title = self.op.retry_translate_title(item["origin_title"])
-            if tr_title is None:
-                tr_title = self.dp.retry_translate_title(item["origin_title"])
+            if item["origin_content"] != "":
+                tr_content = self.op.retry_translate_c2c_content(item["origin_content"])
+                if tr_content:
+                    item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
 
-            if tr_title is not None:
-                # tr_title remove newline
-                tr_title = tr_title.replace("\n", "")
-                # print origin_title translate to title
-                logger.info(f"{item['origin_title']}=>{tr_title}")
-                item["title"] = tr_title
+                category = self.op.retry_generate_c2c_tag(item["origin_content"])
+                if category:
+                    item["category"] = category
 
-        if item["origin_content"] != "":
-            tr_content = self.op.retry_translate_content(item["origin_content"])
-            if tr_content is None:
-                tr_content = self.dp.retry_translate_content(item["origin_content"])
+        else:
+            if item["origin_title"] != "":
+                tr_title = self.op.retry_translate_title(item["origin_title"])
+                if tr_title is None:
+                    tr_title = self.dp.retry_translate_title(item["origin_title"])
 
-            logger.info(f'tr_content:{tr_content}')
-            if tr_content is not None:
-                item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
+                if tr_title is not None:
+                    # tr_title remove newline
+                    tr_title = tr_title.replace("\n", "")
+                    # print origin_title translate to title
+                    logger.info(f"{item['origin_title']}=>{tr_title}")
+                    item["title"] = tr_title
 
-        # generate category
-        category = self.op.retry_generate_category(item["origin_content"])
-        if category is None:
-            category = self.dp.retry_generate_category(item["origin_content"])
+            if item["origin_content"] != "":
+                tr_content = self.op.retry_translate_content(item["origin_content"])
+                if tr_content is None:
+                    tr_content = self.dp.retry_translate_content(item["origin_content"])
 
-        if category is not None:
-            logger.info(f"generate category:{category}")
-            item["category"] = category
+                logger.info(f'tr_content:{tr_content}')
+                if tr_content is not None:
+                    item["content"] = trip_ai_mistake(tr_content) # for fix openai mistake
+
+                # generate category
+                category = self.op.retry_generate_category(item["origin_content"])
+                if category is None:
+                    category = self.dp.retry_generate_category(item["origin_content"])
+
+                if category is not None:
+                    logger.info(f"generate category:{category}")
+                    item["category"] = category
 
         return item
 
@@ -136,13 +152,22 @@ class SaveToMySqlPipeline(object):
     # @defer.inlineCallbacks
     def process_item(self, item, spider):
         if not item["priority"]:
-            if orm.check_if_exceed_num(spider.name, self.count.get_value()):
-                return item
+            if spider.name == "parknews":
+                if orm.check_if_exceed_num_today_and_yesterday(spider.name, self.count.get_value()):
+                    return
+            else:
+                if orm.check_if_exceed_num(spider.name, self.count.get_value()):
+                    return item
 
         obj = item.convert_to_wp_news()
         if obj is not None:
+
             if orm.create_post(obj):
-                self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
+                if spider.name == "parknews":
+                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[], tags=[item.get_post_category()], post_type="newsflashes")
+                else:
+                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
+
                 if item["priority"]:
                     self.count.increment(1)
 

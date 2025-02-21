@@ -1,5 +1,4 @@
 import pickle
-from datetime import datetime
 import pytz
 import hashlib
 
@@ -11,6 +10,46 @@ import logging
 logger = logging.getLogger("common")
 
 import re
+from datetime import datetime
+
+from urllib.parse import urlparse, parse_qs
+
+def contains_app_news(url):
+    """
+    Check if the URL contains the parameter app=news.
+    """
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)  # Parse query parameters as a dictionary
+    return query_params.get("app") == ["news"]  # Check if 'app' exists and its value is 'news'
+
+# # 🔹 Example Usage
+# url = "https://local.6parknews.com/index.php?app=news&act=view&nid=1291491"
+# print(contains_app_news(url))  # Output: True
+
+
+def extract_datetime(text):
+    """
+    Extracts date and time from a string and converts it to a Python datetime object.
+
+    :param text: The input text containing a date and time.
+    :return: A datetime object if found, otherwise None.
+    """
+    sydney_tz = pytz.timezone("Australia/Sydney")
+    match = re.search(r'(\d{4}-\d{2}-\d{2}) (\d{1,2}:\d{2}:\d{2})', text)
+    if match:
+        date_str = match.group(1)  # Extracted Date: YYYY-MM-DD
+        time_str = match.group(2)  # Extracted Time: H:mm:ss or HH:mm:ss
+        datetime_obj = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+        return datetime_obj  # Return Python datetime object
+    return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S") # Return None if no match is found
+
+# # 🔹 Example Usage
+# text = "新闻来源: 微生活 于 2025-02-19 2:05:15"
+# dt = extract_datetime(text)
+#
+# print(dt)  # Output: 2025-02-19 02:05:15
+# print(type(dt))  # Output: <class 'datetime.datetime'>
+
 
 def is_valid_date(date_str, date_format):
     """

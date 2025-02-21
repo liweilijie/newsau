@@ -1,8 +1,10 @@
 import os
 import time
+import logging
 
 from openai import OpenAI
 from newsau.settings import OPENAI_API_KEY
+logger = logging.getLogger('ai')
 
 
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
@@ -14,6 +16,178 @@ class OpenAiPlat(object):
 
         self.client = OpenAI()
         self.categories = ["国际新闻", "中国新闻", "生活指南", "社论点评", "健康医药", "旅游、娱乐", "房产、物业", "国际新闻", "澳洲新闻", "人生感悟", "澳洲新闻", "华人参政", "华人活动", "投资、理财", "教育、留学", "宗教、信仰", "文学世界", "生命探索", "生活品味", "美食养生", "饮食文化"]
+        self.newsflashes_tags = ["互联网", "人文", "信仰", "心情", "房地产", "旅游", "时政", "最前沿", "金融"]
+
+
+    def retry_translate_c2c_title(self, tr_title, max_retries=8, delay=2):
+
+        start_time = time.time()
+        retries = 0
+        while retries < max_retries:
+            try:
+                print(f"do c2c title the {retries}th retry")
+
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "请帮我用不同的表达方式改写下面这段话，字数大体相当，可以正式一点，学术一点，新闻一点的表达，但是一定要换一种方式表达出来，尽管不要和原文一样。"
+                        },
+                        {
+                            "role": "user",
+                            "content": tr_title
+                        }
+                    ],
+                )
+                end_time = time.time()
+                total_time = end_time - start_time
+                print(f"translate title took total time：{total_time:.2f} s")
+
+                if completion is None:
+                    raise ValueError("API return is None.")
+
+                # check choices
+                if not hasattr(completion, 'choices') or not completion.choices:
+                    raise ValueError("API return is not include choices or choices is empty.")
+
+                # check message if exist
+                if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                    raise ValueError("API miss message or message is empty.")
+
+                # check content if exist
+                if not hasattr(completion.choices[0].message, 'content') or not completion.choices[0].message.content:
+                    raise ValueError("API miss content or content is empty.")
+
+                # successful
+                logger.info(f'c2c title:{tr_title}=>{completion.choices[0].message.content}')
+                return completion.choices[0].message.content
+
+            except Exception as e:
+                print(f"translate title {retries} happened error: {e}")
+
+            retries += 1
+            print(f"translate title failed and we will sleep and try again: {retries}th.")
+            if retries < max_retries:
+                time.sleep(delay)
+            else:
+                print(f"finally we translated too many times {max_retries} and give up this translator.")
+                return None
+
+    def retry_generate_c2c_tag(self, tr_content, max_retries=5, delay=2):
+
+        start_time = time.time()
+        retries = 0
+        cate = ",".join(self.newsflashes_tags)
+        while retries < max_retries:
+            try:
+                logger.info(f"generate c2c tag the {retries}th retry")
+
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"请你从给出的新闻分类里面归纳总结出新闻分类，新闻分类只能从这个列表({cate})里面选择一个，结果不要包含新闻分类字样，只要列表里面的分类。"
+                        },
+                        {
+                            "role": "user",
+                            "content": tr_content
+                        }
+                    ],
+                )
+                end_time = time.time()
+                total_time = end_time - start_time
+                logger.info(f"generate c2c tag took total time：{total_time:.2f} s")
+
+                if completion is None:
+                    raise ValueError("API return is None.")
+
+                # check choices
+                if not hasattr(completion, 'choices') or not completion.choices:
+                    raise ValueError("API return is not include choices or choices is empty.")
+
+                # check message if exist
+                if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                    raise ValueError("API miss message or message is empty.")
+
+                # check content if exist
+                if not hasattr(completion.choices[0].message, 'content') or not completion.choices[0].message.content:
+                    raise ValueError("API miss content or content is empty.")
+
+                # successful
+                return completion.choices[0].message.content
+
+            except Exception as e:
+                print(f"generate category {retries} happened error: {e}")
+
+            retries += 1
+            logger.error(f"generate tag failed and we will sleep and try again: {retries}th.")
+            if retries < max_retries:
+                time.sleep(delay)
+            else:
+                logger.error(f"finally we translated too many times {max_retries} and give up this translator.")
+                return None
+
+    def retry_translate_c2c_content(self, tr_content, max_retries=10, delay=2):
+
+        start_time = time.time()
+        retries = 0
+
+        while retries < max_retries:
+            try:
+                logger.info(f"translate c2c content and the {retries}th retry")
+
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "用户想将原来的内容用另外一种表达方式进行描述，描述的字数尽可能的和原来保持一致，可以偏差但是不要太大，请一定要保留原来的html标签，并且在内容的最后总结全篇的思想，总结性的内容用单独一个div标签包裹，另外不用出来总结两个字，总结性的中文内容不超过200字。另外一种表达出来的内容要确保符合中文语言习惯，利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。同时作为翻译家，需将原文翻译成具有信达雅标准的译文。\"信\" 即忠实于原文的内容与意图；\"达\" 意味着译文应通顺易懂，表达清晰；\"雅\" 则追求译文的文化审美和语言的优美。目标是创作出既忠于原作精神，又符合目标语言文化和读者审美的表达。"
+                        },
+                        {
+                            "role": "user",
+                            "content": tr_content,
+                        }
+                    ],
+                )
+
+                end_time = time.time()
+                total_time = end_time - start_time
+                logger.info(f"translate c2c content took total time：{total_time:.2f} s")
+
+                if completion is None:
+                    raise ValueError("API return is None.")
+
+                # check choices
+                if not hasattr(completion, 'choices') or not completion.choices:
+                    raise ValueError("API return is not include choices or choices is empty.")
+
+                # check message if exist
+                if not hasattr(completion.choices[0], 'message') or completion.choices[0].message is None:
+                    raise ValueError("API miss message or message is empty.")
+
+                # check content if exist
+                if not hasattr(completion.choices[0].message, 'content') or not completion.choices[0].message.content:
+                    raise ValueError("API miss content or content is empty.")
+
+                # successful
+                rst = completion.choices[0].message.content
+                logger.info(f'origin: {tr_content}\nnew:{rst}')
+                return rst
+
+            except Exception as e:
+                logger.error(f"translate title {retries} happened error: {e}")
+
+            retries += 1
+            logger.error(f"translate title failed and we will sleep and try again: {retries}th.")
+            if retries < max_retries:
+                time.sleep(delay)
+            else:
+                logger.error(f"finally we translated too many times {max_retries} and give up this translator.")
+                return None
+
+
 
     def retry_generate_category(self, tr_content, max_retries=5, delay=2):
 
