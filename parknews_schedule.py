@@ -27,6 +27,7 @@ class ParkNewsSchedule(object):
 
     def au_job(self):
         self.r.lpush(self.spider_key, '{"url": "https://local.6parknews.com/index.php?type_id=3"}')
+        self.r.lpush(self.spider_key, '{"url": "https://local.6parknews.com/index.php?type_id=3&p=2&nomobile=0"}')
         logger.info(f'lpush {self.spider_key} {{"url": "https://local.6parknews.com/index.php?type_id=3"}}')
 
 def main():
@@ -48,7 +49,8 @@ def main():
 
     park_schedule.au_job()
 
-    schedule.every().hour.do(park_schedule.au_job)
+    schedule.every(10).minutes.do(park_schedule.au_job)
+    # schedule.every().hour.do(park_schedule.au_job)
     # schedule.every().day.at("21:00", "Australia/Sydney").do(park_schedule.justin_job)
 
     # schedule.every(10).minutes.do(job)

@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger("common")
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from urllib.parse import urlparse, parse_qs
 
@@ -25,6 +25,33 @@ def contains_app_news(url):
 # # 🔹 Example Usage
 # url = "https://local.6parknews.com/index.php?app=news&act=view&nid=1291491"
 # print(contains_app_news(url))  # Output: True
+
+
+def is_today_or_yesterday(dt: datetime) -> bool:
+    """
+    Check if the given datetime object is either today or yesterday.
+
+    Parameters:
+        dt (datetime): The datetime object to be checked.
+
+    Returns:
+        bool: True if dt is today or yesterday, otherwise False.
+    """
+    # Get the current date
+    today = datetime.today().date()
+    # Calculate yesterday's date by subtracting one day from today
+    yesterday = today - timedelta(days=1)
+    # Check if the date part of dt is either today or yesterday
+    return dt.date() in (today, yesterday)
+
+# # Example usage
+# if __name__ == '__main__':
+#     now = datetime.now()
+#     print(f"Current: {now} -> {is_today_or_yesterday(now)}")  # Expected output: True
+#
+#     some_date = datetime(2020, 1, 1)
+#     print(f"2020-01-01 -> {is_today_or_yesterday(some_date)}")  # Expected output: False
+
 
 
 def extract_datetime(text):
@@ -153,7 +180,7 @@ def convert_to_datetime(date_str):
         return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S")
 
 
-# trip content the begin ```html and trip the end ```
+# trip content the beginning ```html and trip the end ```
 def trip_ai_mistake(content):
     return content.lstrip('```html').rstrip('```')
 

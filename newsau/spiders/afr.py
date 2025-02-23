@@ -143,7 +143,7 @@ class AfrSpider(RedisSpider):
         for a in sections:
             url = urljoin(self.domain, a)
             if common.contains_valid_date(url):
-                if not orm.query_object_id(self.name, url):
+                if not orm.query_object_id(self.name, common.get_md5(url)):
                     logger.info(f'a:{url} and push to queue')
                     self.queue.push(url)
                 else:

@@ -72,7 +72,7 @@ class ParknewsSpider(RedisSpider):
             post_date = post_node.css('i::text').extract_first("").strip()
             url = urljoin(self.domain, post_url)
             if common.contains_app_news(url):
-                if not orm.query_object_id(self.name, url):
+                if not orm.query_object_id(self.name, common.get_md5(url)):
                     logger.info(f'a:{url} and push to queue')
                     self.queue.push(url)
                 else:
@@ -100,8 +100,12 @@ class ParknewsSpider(RedisSpider):
 
     def detail_parse(self, response):
 
-        is_priority = response.meta.get('is_priority', False)
+        # TODO: check this url_object_id if exist in db
+        if orm.query_object_id(self.name, common.get_md5(response.url)):
+            logger.warning(f'url: {response.url} already exist in db nothing to do.')
+            return
 
+        is_priority = response.meta.get('is_priority', False)
 
         if not is_priority:
             if orm.check_if_exceed_num_today_and_yesterday(self.name, self.count.get_value()):
@@ -119,12 +123,12 @@ class ParknewsSpider(RedisSpider):
         # park_item["topic"] = post_topic
         park_item["url"] = response.url
         park_item["url_object_id"] = common.get_md5(park_item["url"])
-        park_item["post_date"] = common.extract_datetime(post_time)
 
-        # TODO: check this url_object_id if exist in db
-        if orm.query_object_id(self.name, park_item["url_object_id"]):
-            print(f"url: {park_item['url']} already exist in db nothing to do.")
+        park_item["post_date"] = common.extract_datetime(post_time)
+        if not common.is_today_or_yesterday(park_item["post_date"]):
+            logger.warning(f'url {park_item["url"]}, not today or yesterday:{park_item["post_date"]} so nothing to do.')
             return
+        logger.info(f'url {park_item["url"]}, is today or yesterday:{park_item["post_date"]} so to crawl.')
 
         park_item["front_image_url"] = []
 

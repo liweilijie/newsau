@@ -91,6 +91,7 @@ def get_redis(**kwargs):
     """
     redis_cls = kwargs.pop("redis_cls", defaults.REDIS_CLS)
     url = kwargs.pop("url", None)
+    print(f'get_redis {url}, kwargs {kwargs}')
     if url:
         return redis_cls.from_url(url, **kwargs)
     else:

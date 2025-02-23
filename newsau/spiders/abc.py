@@ -89,7 +89,7 @@ class AbcSpider(RedisSpider):
                 url = urljoin(self.domain, post_url)
                 logger.info(f'url:{url}, post_url:{post_url}')
                 if common.contains_valid_date(url):
-                    if not orm.query_object_id(self.name, url):
+                    if not orm.query_object_id(self.name, common.get_md5(url)):
                         logger.info(f'a:{url} and push to queue')
                         self.queue.push(url)
                     else:

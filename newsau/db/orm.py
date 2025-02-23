@@ -120,7 +120,7 @@ def check_if_exceed_num(name, max_value):
 
     if current_count >= max_value:
         logger.info(
-            f"afr we had {current_count} >= {max_value} and exceed the count limit and do nothing.")
+            f"{name} we had {current_count} >= {max_value} and exceed the count limit and do nothing.")
         return True
     return False
 
