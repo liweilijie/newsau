@@ -1,3 +1,4 @@
+import pickle
 from urllib import parse
 import re
 import logging
@@ -161,6 +162,7 @@ class AbcSpider(RedisSpider):
             self.log(f"not content found in {response.url}")
             return
 
+        # pickle.dump(post_content, open("abc.html", "wb"))
 
         # data-component = "Timestamp"
         # datetime = "2025-02-10T04:55:05.000Z"

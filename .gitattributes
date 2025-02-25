@@ -4,6 +4,7 @@ link/.ssh/** filter=git-crypt diff=git-crypt
 *.jpgmemg filter=git-crypt diff=git-crypt
 *.pytty filter=git-crypt diff=git-crypt
 newsau/settings.py filter=git-crypt diff=git-crypt
+schedules/settings.py filter=git-crypt diff=git-crypt
 news.json filter=git-crypt diff=git-crypt
 emacsvi.json filter=git-crypt diff=git-crypt
 .env filter=git-crypt diff=git-crypt

@@ -13,6 +13,9 @@ os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 class OpenAiPlat(object):
 
     def __init__(self):
+        self.gpt_4_turbo = "gpt-4-turbo"
+        self.gpt_4 = "gpt-4"
+        self.gpt_4o_mini = "gpt-4o-mini"
 
         self.client = OpenAI()
         self.categories = ["国际新闻", "中国新闻", "生活指南", "社论点评", "健康医药", "旅游、娱乐", "房产、物业", "国际新闻", "澳洲新闻", "人生感悟", "澳洲新闻", "华人参政", "华人活动", "投资、理财", "教育、留学", "宗教、信仰", "文学世界", "生命探索", "生活品味", "美食养生", "饮食文化"]
@@ -28,12 +31,13 @@ class OpenAiPlat(object):
                 print(f"do c2c title the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4_turbo,
                     messages=[
                         {
                             "role": "system",
-                            "content": "请帮我用不同的表达方式改写下面这段话，字数大体相当，可以正式一点，学术一点，新闻一点的表达，但是一定要换一种方式表达出来，尽管不要和原文一样。"
-                        },
+                            "content": "请帮我换一种表达方式改写下面这段话，字数不要超过30个中文字数，最好不要超过原文的字数，使用抓眼球的醒目简短标题, 标题尽可能简短精炼，可以正式一点，学术一点，新闻一点的表达。"
+                                       # "content": "请帮我用不同的表达方式改写下面这段话，字数不要超过30个中文字数，最好不要超过原文的字数，使用抓眼球的醒目简短标题, 标题尽可能简短精炼，可以正式一点，学术一点，新闻一点的表达，但是一定要换一种方式表达出来。"
+                },
                         {
                             "role": "user",
                             "content": tr_title
@@ -84,7 +88,7 @@ class OpenAiPlat(object):
                 logger.info(f"generate c2c tag the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4o_mini,
                     messages=[
                         {
                             "role": "system",
@@ -139,7 +143,7 @@ class OpenAiPlat(object):
                 logger.info(f"translate c2c content and the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4o_mini,
                     messages=[
                         {
                             "role": "system",
@@ -199,7 +203,7 @@ class OpenAiPlat(object):
                 print(f"generate category the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4o_mini,
                     messages=[
                         {
                             "role": "system",
@@ -256,7 +260,7 @@ class OpenAiPlat(object):
                 print(f"do title the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4o_mini,
                     messages=[
                         {
                             "role": "system",
@@ -313,7 +317,7 @@ class OpenAiPlat(object):
                 print(f"translate content and the {retries}th retry")
 
                 completion = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=self.gpt_4o_mini,
                     messages=[
                         {
                             "role": "system",
