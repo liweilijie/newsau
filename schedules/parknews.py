@@ -30,9 +30,11 @@ class ParkNewsSchedule(object):
             logger.error(f"redis happened error: {e}")
             raise e
 
+    def parknews_job2(self):
+        self.server.lpush(self.spider_key, '{"url": "https://local.6parknews.com/index.php?type_id=3&p=2&nomobile=0"}')
+
     def parknews_job(self):
         self.server.lpush(self.spider_key, '{"url": "https://local.6parknews.com/index.php?type_id=3"}')
-        self.server.lpush(self.spider_key, '{"url": "https://local.6parknews.com/index.php?type_id=3&p=2&nomobile=0"}')
         logger.info(f'lpush {self.spider_key} {{"url": "https://local.6parknews.com/index.php?type_id=3"}}')
 
 def main():
@@ -43,7 +45,11 @@ def main():
 
     parknews_schedule = ParkNewsSchedule()
     parknews_schedule.parknews_job()
-    schedule.every(10).minutes.do(parknews_schedule.parknews_job)
+    time.sleep(50)
+    parknews_schedule.parknews_job2()
+    # After every 5 to 10mins in between run work()
+    schedule.every(7).to(13).minutes.do(parknews_schedule.parknews_job)
+    schedule.every(33).minutes.do(parknews_schedule.parknews_job2)
 
     while True:
         schedule.run_pending()

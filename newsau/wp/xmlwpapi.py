@@ -5,6 +5,8 @@ from wordpress_xmlrpc import Client, WordPressPost
 from wordpress_xmlrpc.methods.posts import NewPost, GetPosts
 from newsau.utils import common
 
+import logging
+logger = logging.getLogger('wpapi')
 
 class WpApi():
 
@@ -21,6 +23,8 @@ class WpApi():
     # post and activate new post
     if title == "" or content == "":
       return
+
+    logger.info(f'post_date:{post_date}')
 
     post = WordPressPost()
     post.title = title
@@ -46,7 +50,7 @@ class WpApi():
 
           post.date = sydney_time.astimezone(pytz.utc)
         except Exception as e:
-          print(f'convert {post_date} to datetime error: {e}')
+          logger.info(f'convert {post_date} to datetime error: {e}')
           post.date = datetime.now(pytz.timezone('Etc/GMT+0'))
 
     # print(f'post utc date:{post.date}')
@@ -67,7 +71,7 @@ class WpApi():
       }
 
     post_id = self.client.call(NewPost(post))
-    print(f'send wordpress successful and post_id:{post_id}')
+    logger.info(f'send wordpress successful and post_id:{post_id}')
     return post_id
 
 if __name__ == "__main__":

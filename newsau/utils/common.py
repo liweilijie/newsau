@@ -68,7 +68,8 @@ def extract_datetime(text):
         time_str = match.group(2)  # Extracted Time: H:mm:ss or HH:mm:ss
         datetime_obj = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
         return datetime_obj  # Return Python datetime object
-    return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S") # Return None if no match is found
+    # return datetime.now(sydney_tz).strftime("%Y-%m-%d %H:%M:%S") # Return None if no match is found
+    return datetime.now(sydney_tz)
 
 # # 🔹 Example Usage
 # text = "新闻来源: 微生活 于 2025-02-19 2:05:15"

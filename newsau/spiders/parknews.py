@@ -41,6 +41,8 @@ class ParknewsSpider(RedisSpider):
 
     def parse(self, response):
 
+        logger.info(f'parse {response.url}')
+
         is_priority = False
         schedule_num = None
 
@@ -71,6 +73,7 @@ class ParknewsSpider(RedisSpider):
             title = post_node.css('a::text').extract_first("").strip()
             post_date = post_node.css('i::text').extract_first("").strip()
             url = urljoin(self.domain, post_url)
+            logger.info(f'post_url:{post_url} and url:{url}')
             if common.contains_app_news(url):
                 if not orm.query_object_id(self.name, common.get_md5(url)):
                     logger.info(f'a:{url} and push to queue')
@@ -125,6 +128,7 @@ class ParknewsSpider(RedisSpider):
         park_item["url_object_id"] = common.get_md5(park_item["url"])
 
         park_item["post_date"] = common.extract_datetime(post_time)
+        logger.info(park_item["post_date"])
         if not common.is_today_or_yesterday(park_item["post_date"]):
             logger.warning(f'url {park_item["url"]}, not today or yesterday:{park_item["post_date"]} so nothing to do.')
             return
@@ -134,9 +138,15 @@ class ParknewsSpider(RedisSpider):
 
         soup = BeautifulSoup(post_content, "html.parser")
 
-        for img in soup.findAll('img'):
-            park_item["front_image_url"].append(img['src'])  # append origin url to download
-            img['src'] = common.get_finished_image_url(self.name, park_item["url_object_id"], img['src'])  # replace our website image url from cdn
+        for img in soup.find_all('img'):
+            original_src = img["src"]
+            if original_src.startswith("http") or original_src.startswith("https"):
+                park_item["front_image_url"].append(original_src)  # append origin url to download
+                img['src'] = common.get_finished_image_url(self.name, park_item["url_object_id"], original_src)  # replace our website image url from cdn
+                logger.info(f'Updated <img> src: {original_src} -> {img["src"]}')
+            else:
+                img.decompose()
+                logger.info(f'decompose <img> src (no change): {original_src}')
 
         # find all a label
         for a in soup.find_all('a'):
