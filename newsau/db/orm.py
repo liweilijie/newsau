@@ -1,10 +1,14 @@
 import logging
 
 from newsau.db import session
-from newsau.db.models import WPScrapyNews, WPScrapyCategory
+from newsau.db.models import WPScrapyNews, WPScrapyCategory, WPScrapyAiRecord
 
 from sqlalchemy import func, and_
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError,IntegrityError
+from typing import Optional
+from sqlalchemy.future import select
+
+
 
 logger = logging.getLogger("mysql")
 
@@ -29,6 +33,7 @@ def query_object_id(name: str, url_object_id: str) -> bool:
             return True
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError error when query_object_id name:{name}, url_object_id:{url_object_id}: {e}")
+        raise RuntimeError("database connection error.")
     except Exception as e:
         logger.error(f"Unexpected error when query_object_id name:{name}, url_object_id:{url_object_id}: {e}")
 
@@ -51,6 +56,7 @@ def count_urls_today_and_yesterday(name: str):
 
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError when querying object_id name:{name}: {e}")
+        raise RuntimeError("database connection error.")
     except Exception as e:
         logger.error(f"Unexpected error when querying object_id name:{name}: {e}")
 
@@ -72,6 +78,7 @@ def count_urls_today(name: str):
             return today_count
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError error when query_object_id name:{name}: {e}")
+        raise RuntimeError("database connection error.")
     except Exception as e:
         logger.error(f"Unexpected error when query_object_id name:{name}: {e}")
 
@@ -98,6 +105,7 @@ def get_category(name, topic):
             return category[0]
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError error when query_object_id name:{name}: {e}")
+        raise RuntimeError("database connection error.")
     except Exception as e:
         logger.error(f"Unexpected error when query_object_id name:{name}: {e}")
 
@@ -135,11 +143,39 @@ def create_post(post: WPScrapyNews) -> bool:
         return True
     except SQLAlchemyError as e:
         logger.error(f"SQLAlchemyError error when create post:{post}: {e}")
+        raise RuntimeError("database connection error.")
     except Exception as e:
         logger.error(f"Unexpected error when create post:{post}: {e}")
 
     return False
 
+def add_scrapy_record(llm: str, name: str, url: str, url_object_id: str, category: Optional[list] = None, tag: Optional[list] = None, title: str = "", content: str = "") -> bool:
+    try:
+        record = WPScrapyAiRecord(
+            llm=llm,
+            name=name,
+            url=url,
+            url_object_id=url_object_id,
+            category=category or [],
+            tag=tag or [],
+            title=title,
+            content=content
+        )
+        session.add(record)
+        session.commit()
+        return True
+    except IntegrityError:  # 捕获唯一性约束错误
+        session.rollback()
+        return False
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError("database connection error.")
+
+
+def get_scrapy_record_if_exist(url_object_id: str) -> Optional[WPScrapyAiRecord]:
+    stmt = select(WPScrapyAiRecord).where(WPScrapyAiRecord.url_object_id == url_object_id)
+    result = session.execute(stmt).scalar_one_or_none()
+    return result
 
 
 

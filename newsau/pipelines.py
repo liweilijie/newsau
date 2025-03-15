@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 
+from datetime import datetime, timedelta
 import scrapy
 from twisted.enterprise import adbapi
 import MySQLdb
@@ -16,9 +17,10 @@ import codecs
 
 from scrapy.utils.project import get_project_settings
 
+from newsau.ai.translator import UnifiedTranslator
 from newsau.db import orm
 
-from newsau.utils.common import get_image_url_full_path, trip_ai_mistake
+from newsau.utils.common import get_image_url_full_path, trip_ai_mistake,get_md5
 import os
 from newsau.ai import openaiplat
 from newsau.ai import deepseek
@@ -40,13 +42,133 @@ class NewsauPipeline:
         return item
 
 
-class AbcContentTranslatePipeline(object):
+class ContentTranslatePipeline:
+    def __init__(self):
+        self.translator = UnifiedTranslator()
+
+    def process_item(self, item, spider):
+        # 检查数据库缓存
+        record = orm.get_scrapy_record_if_exist(item["url_object_id"])
+        if record:
+            logger.warning(f'Using cached translation from MySQL: {record}')
+            item.update({
+                "title": record.title,
+                "content": record.content,
+                "category": record.category[0] if record.category else None
+            })
+            return item
+
+        if spider.name == "parknews":
+            item["title"] = self.translator.retry_translate_c2c_title(item.get("origin_title", ""))
+            item["content"] = self.translator.retry_translate_c2c_content(item.get("origin_content", ""))
+            item["category"] = self.translator.retry_generate_c2c_tag(item.get("origin_content", ""))
+        else:
+            item["title"] = self.translator.retry_translate_title(item.get("origin_title", ""))
+            item["content"] = self.translator.retry_translate_content(item.get("origin_content", ""))
+            item["category"] = self.translator.retry_generate_category(item.get("origin_content", ""))
+            if not item["category"]:
+                item["category"] = self.translator.retry_generate_category(item.get("origin_content", ""))
+
+        llm_source = self.translator.last_successful
+        category_list = (item["category"] if isinstance(item["category"], list) else ([item["category"]] if item["category"] else []))
+        orm.add_scrapy_record(
+            llm=llm_source,
+            name=item["name"],
+            url=item["url"],
+            url_object_id=item["url_object_id"],
+            category=category_list,
+            tag=None,
+            title=item["title"],
+            content=item["content"]
+        )
+        return item
+
+
+class AbcContentTranslatePipeline3(object):
+    def __init__(self):
+        self.dp = deepseek.DeepSeekApi()
+        self.op = openaiplat.OpenAiPlat()
+        self.last_successful_method = "deepseek"
+        self.last_deepseek_failure = None
+        self.retry_interval = timedelta(hours=1)
+
+    def translate(self, text, method, func_name):
+        """通用翻译方法，支持 Deepseek 和 OpenAI"""
+        try:
+            if method == "deepseek":
+                return getattr(self.dp, func_name)(text)
+            else:
+                return getattr(self.op, func_name)(text)
+        except Exception:
+            return None
+
+    def should_retry_deepseek(self):
+        """判断是否应该重试 Deepseek"""
+        if self.last_successful_method == "openai" and self.last_deepseek_failure:
+            return datetime.now() - self.last_deepseek_failure >= self.retry_interval
+        return False
+
+    def process_item(self, item, spider):
+        record = orm.get_scrapy_record_if_exist(item["url_object_id"])
+        if record:
+            logger.warning(f'Using cached translation from MySQL: {record}')
+            item.update({
+                "title": record.title,
+                "content": record.content,
+                "category": record.category[0] if record.category else None
+            })
+            return item
+
+        if self.should_retry_deepseek():
+            self.last_successful_method = "deepseek"
+
+        def translate_field(field, func_name):
+            """通用字段翻译逻辑"""
+            if not field:
+                return None
+            result = self.translate(field, self.last_successful_method, func_name)
+            if result is None and self.last_successful_method == "deepseek":
+                self.last_successful_method = "openai"
+                self.last_deepseek_failure = datetime.now()
+                result = self.translate(field, "openai", func_name)
+            return result
+
+        if spider.name == "parknews":
+            item["title"] = translate_field(item["origin_title"], "retry_translate_c2c_title")
+            item["content"] = translate_field(item["origin_content"], "retry_translate_c2c_content")
+            item["category"] = translate_field(item["origin_content"], "retry_generate_c2c_tag")
+        else:
+            item["title"] = translate_field(item["origin_title"], "retry_translate_title")
+            item["content"] = translate_field(item["origin_content"], "retry_translate_content")
+            item["category"] = translate_field(item["origin_content"], "retry_generate_category")
+            if item["category"] is None:
+                item["category"] = translate_field(item["origin_content"], "retry_generate_category")
+
+        # save record to mysql
+        llm_source = self.last_successful_method
+        orm.add_scrapy_record(
+            llm=llm_source,
+            name=item["name"],
+            url=item["url"],
+            url_object_id=item["url_object_id"],
+            category=item["category"] if isinstance(item["category"], list) else [item["category"]] if item["category"] else [],
+            tag=None,
+            title=item["title"],
+            content=item["content"]
+        )
+
+        return item
+
+
+class AbcContentTranslatePipeline2(object):
 
     def __init__(self):
         # fist use deepseek to translate
         self.dp = deepseek.DeepSeekApi()
         self.op = openaiplat.OpenAiPlat()
-
+        self.last_successful_method = "deepseek"  # 记录上次成功的翻译方式
+        self.last_deepseek_failure = None  # 记录Deepseek失败时间
+        self.retry_interval = timedelta(hours=1)  # 1小时后再试Deepseek
 
     # @defer.inlineCallbacks
     def process_item(self, item, spider):
@@ -59,6 +181,16 @@ class AbcContentTranslatePipeline(object):
         # item["title"] = item["origin_title"]
         # item["content"] = item["origin_content"]
         # return item
+
+        record = orm.get_scrapy_record_if_exist(item["url_object_id"])
+        if not record:
+            logger.warning(f'get already ai result and fetch it in mysql:{record}')
+            item["title"] = record.title
+            item["content"] = record.content
+            item["category"] = record.category[0] if record.category else None
+            # item["tag"] = record.tag[0] if record.tag else None
+            return item
+
         if spider.name == "parknews":
             if item["origin_title"] != "":
                 tr_title = self.op.retry_translate_c2c_title(item["origin_title"])
@@ -106,6 +238,8 @@ class AbcContentTranslatePipeline(object):
                     logger.info(f"generate category:{category}")
                     item["category"] = category
 
+        # save the result of translate to mysql
+        orm.add_scrapy_record(item["name"], item["url"], item["url_object_id"], [item["category"]], None, item["title"], item["content"])
         return item
 
 
