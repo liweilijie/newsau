@@ -198,7 +198,8 @@ class DeepseekAiTranslator(BaseTranslator):
         )
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                # model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_title}
@@ -221,7 +222,7 @@ class DeepseekAiTranslator(BaseTranslator):
         )
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_content}
@@ -236,7 +237,7 @@ class DeepseekAiTranslator(BaseTranslator):
         system_msg = f"请你从给出的新闻内容中归纳出新闻分类，新闻分类只能从列表({cate})中选择一个，不要包含多余描述，仅返回列表中的分类。"
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_content}
@@ -285,7 +286,7 @@ class DeepseekAiTranslator(BaseTranslator):
         system_msg = f"请从以下分类({cate})中选择一个作为新闻标签，不需要多余描述，仅返回分类名称。"
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_content}

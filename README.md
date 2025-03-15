@@ -5,11 +5,16 @@ my project about news of Australia to download.
 # deploy
 
 ```bash
+# ssh login by free
+cat ~/.ssh/id_rsa.pub | pbcopy
+
+# create venv
 python3 -m venv news
 sudo apt install python3.12-venv
 python3 -m venv news
 source news/bin/activate
 
+# upload requirements.txt and install
 pip list
 pip freeze > requirements.txt
 pip install -r requirements.txt
