@@ -43,6 +43,7 @@ def main():
     afr_schedule = AfrSchedule()
     afr_schedule.afr_job()
 
+    schedule.every().day.at("06:00", "Australia/Sydney").do(afr_schedule.afr_job)
     schedule.every().day.at("07:00", "Australia/Sydney").do(afr_schedule.afr_job)
     schedule.every().day.at("08:00", "Australia/Sydney").do(afr_schedule.afr_job)
     schedule.every().day.at("09:00", "Australia/Sydney").do(afr_schedule.afr_job)

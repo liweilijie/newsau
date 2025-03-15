@@ -43,6 +43,7 @@ def main():
     abc_schedule = AbcSchedule()
     abc_schedule.abc_job()
 
+    schedule.every().day.at("06:00", "Australia/Sydney").do(abc_schedule.abc_job)
     schedule.every().day.at("07:00", "Australia/Sydney").do(abc_schedule.abc_job)
     schedule.every().day.at("08:00", "Australia/Sydney").do(abc_schedule.abc_job)
     schedule.every().day.at("09:00", "Australia/Sydney").do(abc_schedule.abc_job)
