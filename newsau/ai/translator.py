@@ -254,7 +254,8 @@ class DeepseekAiTranslator(BaseTranslator):
         )
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                # model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_title}
@@ -271,7 +272,8 @@ class DeepseekAiTranslator(BaseTranslator):
         )
         def api_call():
             completion = self.client.chat.completions.create(
-                model="deepseek-reasoner",
+                # model="deepseek-reasoner",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": tr_content}

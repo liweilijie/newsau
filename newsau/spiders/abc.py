@@ -53,25 +53,34 @@ class AbcSpider(RedisSpider):
 
     def parse(self, response):
 
-        is_priority = False
-        schedule_num = None
+        is_priority = response.meta.get("schedule") == "priority_url"
+        schedule_num = response.meta.get("schedule_num", 0)
 
-        if response.request.meta is not None:
-            schedule = response.request.meta.get("schedule")
-            if schedule is not None and schedule == "priority_url":
-                is_priority = True
+        if schedule_num > 0:
+            logger.info(f'Before count_everyday: {self.count.get_value()}')
+            self.count.increment(schedule_num)
+            logger.info(f'After increment, count_everyday: {self.count.get_value()}')
 
-        if response.request.meta is not None:
-            schedule_num = response.request.meta.get("schedule_num")
-            if schedule_num is not None and schedule_num > 0:
-                logger.info(f'before count_everyday:{self.count.get_value()}')
-                self.count.increment(schedule_num)
-                logger.info(f'result current count_everyday:{self.count.get_value()}')
+        if not is_priority and orm.check_if_exceed_num(self.name, self.count.get_value()):
+            logger.info('Exceeded daily limit, stopping crawl.')
+            return
 
-        if not is_priority:
-            if orm.check_if_exceed_num(self.name, self.count.get_value()):
-                logger.info('exceed and return.')
-                return
+        # if response.request.meta is not None:
+        #     schedule = response.request.meta.get("schedule")
+        #     if schedule is not None and schedule == "priority_url":
+        #         is_priority = True
+        #
+        # if response.request.meta is not None:
+        #     schedule_num = response.request.meta.get("schedule_num")
+        #     if schedule_num is not None and schedule_num > 0:
+        #         logger.info(f'before count_everyday:{self.count.get_value()}')
+        #         self.count.increment(schedule_num)
+        #         logger.info(f'result current count_everyday:{self.count.get_value()}')
+        #
+        # if not is_priority:
+        #     if orm.check_if_exceed_num(self.name, self.count.get_value()):
+        #         logger.info('exceed and return.')
+        #         return
 
         if common.contains_valid_date(response.url):
             yield scrapy.Request(url=response.url, callback=self.detail_parse, dont_filter=True, meta={"is_priority": True})
@@ -89,17 +98,22 @@ class AbcSpider(RedisSpider):
             if post_url:
                 url = urljoin(self.domain, post_url)
                 logger.info(f'url:{url}, post_url:{post_url}')
-                if common.contains_valid_date(url):
-                    if not orm.query_object_id(self.name, common.get_md5(url)):
-                        logger.info(f'a:{url} and push to queue')
-                        self.queue.push(url)
-                    else:
-                        logger.info(f'do nothing because already in db:{url}')
+                if common.contains_valid_date(url) and not orm.query_object_id(self.name, common.get_md5(url)):
+                    logger.info(f'New URL found: {url}, adding to queue.')
+                    self.queue.push(url)
+                else:
+                    logger.info(f'URL already processed or invalid: {url}')
+                # if common.contains_valid_date(url):
+                #     if not orm.query_object_id(self.name, common.get_md5(url)):
+                #         logger.info(f'a:{url} and push to queue')
+                #         self.queue.push(url)
+                #     else:
+                #         logger.info(f'do nothing because already in db:{url}')
 
-        logger.info(f'we get the queue len:{self.queue.size()}')
+        logger.info(f'Queue size: {self.queue.size()}')
 
         if orm.check_if_exceed_num(self.name, self.count.get_value()):
-            logger.warning(f'exceed and clear the pending list and nothing to do.')
+            logger.warning('Daily limit reached, clearing queue.')
             self.queue.clear()
             return
 
@@ -123,23 +137,33 @@ class AbcSpider(RedisSpider):
         is_priority = response.meta.get('is_priority', False)
 
 
-        if not is_priority:
-            if orm.check_if_exceed_num(self.name, self.count.get_value()):
-                return
+        if not is_priority and orm.check_if_exceed_num(self.name, self.count.get_value()):
+            logger.info('Exceeded daily limit, skipping this URL.')
+            return
 
-        self.log(f"I just visited parse detail {response.url}")
+        # if not is_priority:
+        #     if orm.check_if_exceed_num(self.name, self.count.get_value()):
+        #         return
+
+        logger.info(f'Processing detail page: {response.url}')
+        # self.log(f"I just visited parse detail {response.url}")
 
         abc_item = AbcDataItem()
         abc_item["name"] = self.name
         abc_item["priority"] = is_priority
 
         post_title = response.xpath('//*[@id="content"]/article//header//h1/text()').extract_first("").strip()
-        if post_title == '':
+        if not post_title:
+        # if post_title == '':
             post_title = response.css('div[data-component="ArticleWeb"] h1::text').extract_first("").strip()
 
-        if post_title == '' or post_title is None:
-            self.log(f"no title found in {response.url}")
+        if not post_title:
+            logger.warning(f'No title found for URL: {response.url}')
+            yield from self.process_next_url()  # Process next URL
             return
+        # if post_title == '' or post_title is None:
+        #     self.log(f"no title found in {response.url}")
+        #     return
 
         post_topic = response.xpath('//*[@id="content"]/article//header//ul/li//p/text()').extract_first("").strip()
         if post_topic == '':
@@ -154,13 +178,17 @@ class AbcSpider(RedisSpider):
         post_header = response.xpath('//*[@id="content"]/article/div/div[1]/div[1]/div[3]').extract_first("").strip()
 
         post_content = response.xpath('//*[@id="body"]//div[contains(@class,ArticleRender)]/text()').extract_first("").strip()
-        if post_content == '':
+        if not post_content:
             post_content = response.xpath('//*[@id="content"]/article/div/div[2]/div/div[1]').extract_first("").strip()
 
 
-        if post_content == '' or post_content is None:
-            self.log(f"not content found in {response.url}")
+        if not post_content:
+            logger.warning(f'No content found for URL: {response.url}')
+            yield from self.process_next_url()  # Process next URL
             return
+        # if post_content == '' or post_content is None:
+        #     self.log(f"not content found in {response.url}")
+        #     return
 
         # pickle.dump(post_content, open("abc.html", "wb"))
 
@@ -180,10 +208,15 @@ class AbcSpider(RedisSpider):
         abc_item["url_object_id"] = common.get_md5(abc_item["url"])
 
 
-        # TODO: check this url_object_id if exist in db
         if orm.query_object_id(self.name, abc_item["url_object_id"]):
-            print(f"url: {abc_item['url']} already exist in db nothing to do.")
+            logger.info(f'URL already processed: {abc_item["url"]}')
+            yield from self.process_next_url()  # Process next URL
             return
+
+        # # TODO: check this url_object_id if exist in db
+        # if orm.query_object_id(self.name, abc_item["url_object_id"]):
+        #     print(f"url: {abc_item['url']} already exist in db nothing to do.")
+        #     return
 
         # abc_item["category"] = orm.get_category(self.name, abc_item["topic"])
 
@@ -219,4 +252,5 @@ class AbcSpider(RedisSpider):
         if abc_item["url"] != "" and abc_item["origin_title"] != "" and abc_item["origin_content"] != "":
             yield abc_item
         else:
-            print("nothing to do due to invalid item: ", abc_item)
+            logger.warning(f'Invalid item, missing data: {abc_item}')
+            yield from self.process_next_url()  # Process next URL
