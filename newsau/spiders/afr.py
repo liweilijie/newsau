@@ -21,6 +21,8 @@ from newsau.db import orm
 from newsau.cache import url_queue, rcount
 from newsau.settings import REDIS_URL
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+
 
 logger = logging.getLogger('afr')
 logging.getLogger('selenium.webdriver.remote.remote_connection').setLevel(logging.WARNING)
@@ -63,14 +65,34 @@ class AfrSpider(RedisSpider):
         self.user = AFR_USER
         self.password = AFR_PASSWORD
 
+        chrome_path = "/usr/bin/google-chrome"
+        chromedriver_path = "/usr/bin/chromedriver"
+
         options = Options()
 
         options.headless = True
+        # options.headless = False
         options.add_argument("--log-level=3")  # just show error
         options.add_argument("--silent")  # not show log
+        # options.add_argument('--no-sandbox')
+        # options.add_argument('--disable-dev-shm-usage')
+        # options.add_argument('--disable-blink-features=AutomationControlled')
+        # options.add_argument('--disable-extensions')
+        # options.add_argument('--disable-popup-blocking')
+        # options.add_argument('--disable-background-networking')
+        # options.add_argument('--disable-default-apps')
 
-        # 禁用子进程
-        self.driver = uc.Chrome(options=options, headless=True, use_subprocess=False)
+        # service = Service(executable_path=chromedriver_path)
+
+        # self.driver = uc.Chrome(options=options, headless=True, use_subprocess=False)
+        # 显式设置版本匹配
+        self.driver = uc.Chrome(
+            options=options,
+            driver_executable_path=chromedriver_path,
+            browser_executable_path=chrome_path,
+            use_subprocess=False, # 禁用子进程
+            version_main=134  # 非常重要，强制使用 Chrome 133 匹配逻辑
+        )
         # TODO: use_subprocess
         # self.driver = uc.Chrome(headless=True, use_subprocess=False)
         self.wait = WebDriverWait(self.driver, 20)
@@ -137,8 +159,9 @@ class AfrSpider(RedisSpider):
 
         body = Selector(text=page_text)
 
-        sections = body.xpath('//*[@id="content"]/section[2]//a/@href').extract()
+        sections = body.xpath('//*[@id="content"]/section[3]//a/@href').extract()
 
+        # //*[@id="content"]/section[3]
         # total = 0
         for a in sections:
             url = urljoin(self.domain, a)
@@ -191,21 +214,24 @@ class AfrSpider(RedisSpider):
         time.sleep(5)
 
         try:
-            end = WebDriverWait(self.driver, timeout=10).until(
+            end = WebDriverWait(self.driver, timeout=20).until(
                 EC.presence_of_element_located((By.ID, "endOfArticle"))
             )
 
             end.click()
         except Exception as e:
             logger.error(f"wait endOfArticle error:{e}")
+            # self.driver.save_screenshot(f"{response.url.split('/')[-1]}.png")
+            # with open(f"{response.url.split('/')[-1]}.html", "w", encoding="utf-8") as f:
+            #     f.write(self.driver.page_source)
 
-        # self.driver.save_screenshot('t3.png')
+        # self.driver.save_screenshot('t3.png') # debug
 
         # js = "window.scrollTo(0, document.body.scrollHeight)"
         self.driver.execute_script(self.js)
 
         page_text = self.driver.page_source
-        # logger.debug(f'page_text:{page_text}')
+        # logger.debug(f'page_text:{page_text}') # debug
 
         try:
             body = Selector(text=page_text)
@@ -446,6 +472,7 @@ class AfrSpider(RedisSpider):
 
             if afr_item["url"] != "" and afr_item["origin_title"] != "" and afr_item["origin_content"] != "":
                 yield afr_item
+                # logger.debug(afr_item)
             else:
                 print("nothing to do due to invalid item: ", afr_item)
         except Exception as e:

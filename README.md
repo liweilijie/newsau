@@ -125,3 +125,5 @@ chromedriver --url-base=/wd/hub
 ```ini
 environment=PYTHONPATH='/home/ec2-user/.local/lib/python3.6/site-packages/'
 ```
+
+## mysql 主从复制
