@@ -57,7 +57,7 @@ class OpenAiTranslator(BaseTranslator):
 
     def retry_translate_title(self, tr_title: str, max_retries: int = 8, delay: int = 2) -> Optional[str]:
         system_msg = (
-            "你是一个中英文翻译专家，用户需要将英文标题翻译成中文，翻译后的字数和原英文字数接近，"
+            "你是一个中英文翻译专家，用户需要将英文标题翻译成中文，翻译后的字数和原英文字数接近，保留英文的人名和地名。"
             "不要相差太多，最长也要控制内容在200个字以内，翻译的内容要确保符合中文语言习惯，"
             "利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。"
             "同时作为翻译家，需将原文翻译成具有信达雅标准的译文。"
@@ -81,7 +81,7 @@ class OpenAiTranslator(BaseTranslator):
 
     def retry_translate_content(self, tr_content: str, max_retries: int = 10, delay: int = 2) -> Optional[str]:
         system_msg = (
-            "你是一个中英文翻译专家，用户想将内容翻译成中文，翻译的时候保留html标签，并且在内容的最后总结全篇的思想，"
+            "你是一个中英文翻译专家，用户想将内容翻译成中文，翻译的时候保留html标签，并且在内容的最后总结全篇的思想，保留英文的人名和地名。"
             "总结性的内容用单独一个div标签包裹，另外不用出来总结两个字，总结性的中文内容不超过200字。"
             "翻译的内容要确保符合中文语言习惯，利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。"
             "同时作为翻译家，需将原文翻译成具有信达雅标准的译文。"
@@ -141,7 +141,7 @@ class OpenAiTranslator(BaseTranslator):
 
     def retry_translate_c2c_content(self, tr_content: str, max_retries: int = 10, delay: int = 2) -> Optional[str]:
         system_msg = (
-            "用户想将原来的内容用另外一种表达方式进行描述，描述的字数尽可能的和原来保持一致，可以偏差但是不要太大，"
+            "用户想将原来的内容用另外一种表达方式进行描述，描述的字数尽可能的和原来保持一致，可以偏差但是不要太大，保留英文的人名和地名。"
             "请一定要保留原来的html标签，并且在内容的最后总结全篇的思想，总结性的内容用单独一个div标签包裹，"
             "另外不用出来总结两个字，总结性的中文内容不超过200字。"
             "另外一种表达出来的内容要确保符合中文语言习惯，利用新闻风格来调整语气和风格，"
@@ -185,7 +185,7 @@ class DeepseekAiTranslator(BaseTranslator):
 
     def retry_translate_title(self, tr_title: str, max_retries: int = 5, delay: int = 2) -> Optional[str]:
         system_msg = (
-            "你是一个中英文翻译专家，用户需要将英文标题翻译成中文，翻译后的字数和原英文字数接近，"
+            "你是一个中英文翻译专家，用户需要将英文标题翻译成中文，翻译后的字数和原英文字数接近，保留英文的人名和地名。"
             "不要相差太多，最长也要控制内容在200个字以内，翻译的内容要确保符合中文语言习惯，"
             "利用新闻风格来调整语气和风格，并考虑到某些词语的文化内涵和地区差异。"
             "同时作为翻译家，需将原文翻译成具有信达雅标准的译文。"
@@ -211,13 +211,13 @@ class DeepseekAiTranslator(BaseTranslator):
 
     def retry_translate_content(self, tr_content: str, max_retries: int = 5, delay: int = 2) -> Optional[str]:
         system_msg = (
-            "你是一个中英文翻译专家，用户想将内容翻译成中文，翻译时请保留HTML标签，并在内容最后总结全篇思想，"
+            "你是一个中英文翻译专家，用户想将内容翻译成中文，翻译时请保留HTML标签，并在内容最后总结全篇思想，保留英文的人名和地名。"
             "总结性内容使用单独一个div标签包裹，且中文总结不超过200字。同时确保译文符合中文语言习惯，不使用'总结'等显性引导词,表现得自然一点。\n"
             "补充段落与正文保持连贯\n"
             "利用新闻风格调整语气和风格，并考虑词语的文化内涵与地区差异。最终的结果不要有解析说明，只需要有干干净净的翻译结果即可。\n"
             "文化意象自动转换（例：'英里'→'公里'）\n"
             "中英新闻翻译要求："
-            "1. 仅输出翻译结果"
+            "1. 仅输出翻译结果,保留英文的人名和地名。"
             "2. 无附加说明"
         )
         def api_call():

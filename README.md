@@ -127,3 +127,29 @@ environment=PYTHONPATH='/home/ec2-user/.local/lib/python3.6/site-packages/'
 ```
 
 ## mysql 主从复制
+
+```sql
+--在从库上先清除配置信息
+RESET SLAVE ALL;
+RESET MASTER;
+      
+--- 提示：在导入过程中，为保证数据一致性和顺利导入，建议先关闭只读模式：
+SET GLOBAL read_only = OFF;
+
+mysql -h127.0.0.1 -uroot -p < all_databases2.sql
+
+CHANGE MASTER TO 
+    MASTER_HOST='192.168.1.253', 
+    MASTER_PORT=3306, 
+    MASTER_USER='replica', 
+    MASTER_PASSWORD='AEsbso129129', 
+    MASTER_AUTO_POSITION=1;
+       
+START SLAVE;
+SHOW SLAVE STATUS\G
+# 一切正常后再开启只读模式保护数据 
+SET GLOBAL read_only = ON;
+
+
+
+```

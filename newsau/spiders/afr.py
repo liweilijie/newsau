@@ -159,18 +159,42 @@ class AfrSpider(RedisSpider):
 
         body = Selector(text=page_text)
 
-        sections = body.xpath('//*[@id="content"]/section[3]//a/@href').extract()
+        # # old ok: sections = body.xpath('//*[@id="content"]/section[3]//a/@href').extract()
+        # all_hrefs = body.xpath('//*[@id="content"]//section//a/@href').extract()
+        #
+        # # //*[@id="content"]/section[3]
+        # # total = 0
+        # for a in all_hrefs:
+        #     url = urljoin(self.domain, a)
+        #     if common.contains_valid_date(url):
+        #         if not orm.query_object_id(self.name, common.get_md5(url)):
+        #             logger.info(f'a:{url} and push to queue')
+        #             self.queue.push(url)
+        #         else:
+        #             logger.info(f'do nothing because already in db:{url}')
+        #
+        # logger.info(f'we get the queue len:{self.queue.size()}')
 
-        # //*[@id="content"]/section[3]
-        # total = 0
-        for a in sections:
-            url = urljoin(self.domain, a)
+        # 1. 先选出所有 a 节点
+        anchors = body.xpath('//*[@id="content"]/section[2]//a')
+
+        for a in anchors:
+            # 2. 提取 href 并拼接成完整 URL
+            raw_href = a.xpath('@href').get()  # 或者 extract_first()
+            url = urljoin(self.domain, raw_href)  # 完整链接
+
+            # 3. 提取链接文本
+            #    使用 string(.) 将 a 标签内部所有文字节点合并，并去除首尾空白
+            text = a.xpath('normalize-space(string(.))').get()  # :contentReference[oaicite:0]{index=0}
+
+            # 4. 原有的日期校验与去重逻辑
             if common.contains_valid_date(url):
                 if not orm.query_object_id(self.name, common.get_md5(url)):
-                    logger.info(f'a:{url} and push to queue')
+                    logger.info(f'Found link: {url}  with text: "{text}", pushing to queue')
+                    # 可以把字典或自定义对象 push 到队列
                     self.queue.push(url)
                 else:
-                    logger.info(f'do nothing because already in db:{url}')
+                    logger.info(f'Already in DB: {url}  with text: "{text}"')
 
         logger.info(f'we get the queue len:{self.queue.size()}')
 
