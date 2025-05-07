@@ -87,6 +87,9 @@ class AbcDataItem(scrapy.Item):
     def get_post_date(self):
         return self.get("post_date", common.convert_to_datetime(None))
 
+    def get_origin_title(self):
+        return self.get("origin_title", "")
+
     def get_title(self):
         return self.get("title", "")
 

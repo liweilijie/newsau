@@ -14,6 +14,44 @@ from datetime import datetime, timedelta
 
 from urllib.parse import urlparse, parse_qs
 
+from bs4 import BeautifulSoup
+import html
+import bleach
+
+def contains_keywords(title: str) -> bool:
+    keywords = ["根据要求，以上为严格遵循指令的最终译文", "改写结果"]
+    return any(keyword in title for keyword in keywords)
+
+def clean_html(raw_html: str) -> str:
+    # 1. HTML 实体解码
+    decoded = html.unescape(raw_html)
+
+    # 2. 用 BeautifulSoup 宽容解析
+    try:
+        soup = BeautifulSoup(decoded, 'html.parser')
+    except Exception:
+        soup = BeautifulSoup(decoded, 'html5lib')
+
+    # 3. 删除不需要的标签
+    for tag in soup.find_all(['aside', 'iframe', 'script', 'style']):
+        tag.decompose()
+
+    # 4. 清空所有属性（如需保留少量可改为标签白名单）
+    # for tag in soup.find_all(True):
+    #     tag.attrs = {}
+
+    # 5. 最后一遍 bleach 白名单过滤
+    allowed_tags  = ['p', 'div', 'figure', 'figcaption', 'img', 'picture', 'source'
+                     'ul', 'ol', 'li', 'a', 'strong', 'em', 'blockquote']
+    cleaned = bleach.clean(
+        str(soup),
+        tags=allowed_tags,
+        attributes=lambda tag, name, value: True,  # 放行所有属性
+        strip=True
+    )
+
+    return cleaned
+
 def contains_app_news(url):
     """
     Check if the URL contains the parameter app=news.

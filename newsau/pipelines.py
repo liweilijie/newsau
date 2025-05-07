@@ -20,7 +20,7 @@ from scrapy.utils.project import get_project_settings
 from newsau.ai.translator import UnifiedTranslator
 from newsau.db import orm
 
-from newsau.utils.common import get_image_url_full_path, trip_ai_mistake,get_md5
+from newsau.utils.common import get_image_url_full_path, trip_ai_mistake,get_md5,clean_html,contains_keywords
 import os
 from newsau.ai import openaiplat
 from newsau.ai import deepseek
@@ -264,7 +264,7 @@ class AbcImagePipeline(ImagesPipeline):
             for ok, value in results:
                 # logger.debug(f'ok:{ok}, value:{value}')
                 if isinstance(value, dict) and 'path' in value:
-                    item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]['image_cdn_domain']}{value["path"]}')
+                    item["front_image_path"].append(f'{SETTING["NEWS_ACCOUNTS"][item["name"]]["image_cdn_domain"]}{value["path"]}')
 
         return item
 
@@ -298,9 +298,15 @@ class SaveToMySqlPipeline(object):
 
             if orm.create_post(obj):
                 if spider.name == "parknews":
-                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[], tags=[item.get_post_category()], post_type="newsflashes")
+                    if contains_keywords(item.get_title()):
+                        logger.error(f"{item.get_title()} deepseek happened any error so use origin title:{item.get_origin_title()}")
+                        self.wp.post(item.get_origin_title(), item.get_content(), post_date=item.get_post_date(),
+                                     categories=[], tags=[item.get_post_category()], post_type="newsflashes")
+                    else:
+                        self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[], tags=[item.get_post_category()], post_type="newsflashes")
                 else:
-                    self.wp.post(item.get_title(), item.get_content(), post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
+                    cleaned_content = clean_html(item.get_content())
+                    self.wp.post(item.get_title(), cleaned_content, post_date=item.get_post_date(), categories=[item.get_post_category()], tags=[item["name"]])
 
                 if item["priority"]:
                     self.count.increment(1)

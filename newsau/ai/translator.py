@@ -251,6 +251,11 @@ class DeepseekAiTranslator(BaseTranslator):
         system_msg = (
             "请帮我换一种表达方式改写下面这段话，要求字数不超过30个中文字，尽量不超过原文，"
             "使用醒目、简短的标题表达，尽可能简洁精炼，风格正式、学术且具新闻感，且不要出现“标题”二字。最终的结果不要有解析说明，只需要有干干净净的翻译结果即可。"
+            "严格遵循："
+            "1. 仅输出结果。"
+            "2. 无附加说明"
+            "3. 仅返回最终译文"
+            "4. 禁用任何注释/说明"
         )
         def api_call():
             completion = self.client.chat.completions.create(

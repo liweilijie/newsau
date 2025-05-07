@@ -66,7 +66,8 @@ class AfrSpider(RedisSpider):
         self.password = AFR_PASSWORD
 
         chrome_path = "/usr/bin/google-chrome"
-        chromedriver_path = "/usr/bin/chromedriver"
+        # chromedriver_path = "/usr/bin/chromedriver"
+        chromedriver_path = "/home/sp/drivers/chromedriver"
 
         options = Options()
 
@@ -437,7 +438,7 @@ class AfrSpider(RedisSpider):
                                 if len(url_parts) > 1:  # If the URL has a scaling factor (e.g., 2x)
                                     if url_parts[0].startswith("http") or url_parts[0].startswith("https"):
                                         afr_item["front_image_url"].append(url_parts[0])  # save origin url
-                                        url_with_scaling = f"{common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0])} {url_parts[1]}"
+                                        url_with_scaling = f'{common.get_finished_image_url(self.name, afr_item["url_object_id"], url_parts[0])} {url_parts[1]}'
                                         updated_urls.append(url_with_scaling)
                                     else:
                                         updated_urls.append(url)  # do nothing
