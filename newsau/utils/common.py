@@ -19,7 +19,7 @@ import html
 import bleach
 
 def contains_keywords(title: str) -> bool:
-    keywords = ["根据要求，以上为严格遵循指令的最终译文", "改写结果"]
+    keywords = ["根据要求，以上为严格遵循指令的最终译文", "改写结果", "注：", "的最终译文"]
     return any(keyword in title for keyword in keywords)
 
 def clean_html(raw_html: str) -> str:
