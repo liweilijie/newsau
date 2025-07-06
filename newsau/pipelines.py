@@ -288,7 +288,7 @@ class SaveToMySqlPipeline(object):
         if not item["priority"]:
             if spider.name == "parknews":
                 if orm.check_if_exceed_num_today_and_yesterday(spider.name, self.count.get_value()):
-                    return
+                    return item
             else:
                 if orm.check_if_exceed_num(spider.name, self.count.get_value()):
                     return item
@@ -310,6 +310,9 @@ class SaveToMySqlPipeline(object):
 
                 if item["priority"]:
                     self.count.increment(1)
+
+        if spider.name == "ft":
+            return item
 
         task = self.queue.pop()
         if task:

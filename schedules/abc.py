@@ -31,8 +31,8 @@ class AbcSchedule(object):
             raise e
 
     def abc_job(self):
-        self.server.lpush(self.spider_key, '{"url": "https://www.abc.net.au/news/justin", "meta": {"schedule_num":1}}')
-        logger.info(f'lpush {self.spider_key} {{"url": "https://www.abc.net.au/news/justin", "meta": {{"schedule_num":1}}}}')
+        self.server.lpush(self.spider_key, '{"url": "https://www.abc.net.au", "meta": {"schedule_num":1}}')
+        logger.info(f'lpush {self.spider_key} {{"url": "https://www.abc.net.au", "meta": {{"schedule_num":1}}}}')
 
 def main():
 

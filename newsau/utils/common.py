@@ -41,7 +41,7 @@ def clean_html(raw_html: str) -> str:
     #     tag.attrs = {}
 
     # 5. 最后一遍 bleach 白名单过滤
-    allowed_tags  = ['p', 'div', 'figure', 'figcaption', 'img', 'picture', 'source'
+    allowed_tags  = ['p', 'div', 'figure', 'figcaption', 'img', 'picture', 'source',
                      'ul', 'ol', 'li', 'a', 'strong', 'em', 'blockquote']
     cleaned = bleach.clean(
         str(soup),
@@ -100,6 +100,9 @@ def extract_datetime(text):
     :return: A datetime object if found, otherwise None.
     """
     sydney_tz = pytz.timezone("Australia/Sydney")
+    if text is None:
+        return datetime.now(sydney_tz)
+
     match = re.search(r'(\d{4}-\d{2}-\d{2}) (\d{1,2}:\d{2}:\d{2})', text)
     if match:
         date_str = match.group(1)  # Extracted Date: YYYY-MM-DD

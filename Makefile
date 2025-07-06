@@ -1,8 +1,8 @@
 # Makefile
 
-SERVER = 192.168.1.251
+SERVER = 8.217.116.214
 SERVER_DIR = /home/sp/py/code/newsau
-SSH_PORT = 22
+SSH_PORT = 7251
 
 upload:
 	@echo "Deploying to server $(SERVER) at $(SERVER_DIR)..."
